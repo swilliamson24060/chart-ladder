@@ -1,0 +1,11 @@
+{
+  "chart_week_rows": 28342,
+  "unique_songs": 1196,
+  "unique_artists": 821,
+  "protected_names_count": 58,
+  "flagged_performer_strings_count": 2,
+  "flagged_performer_strings_sample": [
+    "M",
+    "U2"
+  ]
+}

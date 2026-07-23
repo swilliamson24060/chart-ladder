@@ -22,16 +22,15 @@ Design decisions locked in with the user (2026-07-12):
     at least one shared song - it is not transitive through a common
     third collaborator.
 """
+import argparse
 import csv
 import json
+import os
 import re
 import sys
 from collections import defaultdict
 
 RAW_CSV = "Billboard Hot 100 History - hot-100-current.csv"
-OUT_SONGS = "data/songs.json"
-OUT_ARTISTS = "data/artists.json"
-OUT_REPORT = "data/parse_report.json"
 
 # Real act names that contain characters we otherwise treat as collaborator
 # separators. Matched case-insensitively, longest first, before splitting.
@@ -171,10 +170,21 @@ def split_performers(raw: str):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Build a normalized Chartcross dataset from a chart-history CSV.")
+    parser.add_argument("--input", default=RAW_CSV, help="Source chart-history CSV.")
+    parser.add_argument("--output-dir", default="data", help="Directory for songs.json, artists.json, and parse_report.json.")
+    args = parser.parse_args()
+    raw_csv = args.input
+    output_dir = args.output_dir
+    out_songs = os.path.join(output_dir, "songs.json")
+    out_artists = os.path.join(output_dir, "artists.json")
+    out_report = os.path.join(output_dir, "parse_report.json")
+    os.makedirs(output_dir, exist_ok=True)
+
     songs = {}  # (title, raw_performer) -> song dict accumulator
     row_count = 0
 
-    with open(RAW_CSV, newline="", encoding="utf-8") as f:
+    with open(raw_csv, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             row_count += 1
@@ -269,9 +279,9 @@ def main():
             "collaborator_ids": sorted(collab_edges[aid]),
         })
 
-    with open(OUT_SONGS, "w", encoding="utf-8") as f:
+    with open(out_songs, "w", encoding="utf-8") as f:
         json.dump(songs_out, f, ensure_ascii=False)
-    with open(OUT_ARTISTS, "w", encoding="utf-8") as f:
+    with open(out_artists, "w", encoding="utf-8") as f:
         json.dump(artists_out, f, ensure_ascii=False)
 
     flagged_unique = sorted(set(flagged))
@@ -283,7 +293,7 @@ def main():
         "flagged_performer_strings_count": len(flagged_unique),
         "flagged_performer_strings_sample": flagged_unique[:100],
     }
-    with open(OUT_REPORT, "w", encoding="utf-8") as f:
+    with open(out_report, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
 
     print(json.dumps(report, indent=2), file=sys.stderr)

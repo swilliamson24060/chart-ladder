@@ -17,7 +17,11 @@ import {
   GRID_SIZE,
   WILD_TILE_COST,
 } from "@chartcross/engine";
-import { dataset } from "./src/dataset";
+import {
+  defaultCategory,
+  GAME_CATEGORIES,
+  GameCategory,
+} from "./src/dataset";
 import { colors } from "./src/theme";
 import { BoardGrid } from "./src/components/BoardGrid";
 import { Rack } from "./src/components/Rack";
@@ -28,6 +32,7 @@ import { GameOverModal } from "./src/components/GameOverModal";
 import { HowToPlayModal } from "./src/components/HowToPlayModal";
 import { StuckModal } from "./src/components/StuckModal";
 import { LeaderboardModal } from "./src/components/LeaderboardModal";
+import { CategorySelectModal } from "./src/components/CategorySelectModal";
 
 const LEVEL_NAMES = [
   "THE COLLABORATIVE WEB",
@@ -37,14 +42,16 @@ const LEVEL_NAMES = [
   "PEAK PERFORMANCE",
 ];
 
-function newEngine(levelNumber: number) {
-  return new GameEngine(dataset, levelNumber, Date.now() + levelNumber);
+function newEngine(category: GameCategory, levelNumber: number) {
+  return new GameEngine(category.dataset, levelNumber, Date.now() + levelNumber);
 }
 
 export default function App() {
   const { width } = useWindowDimensions();
   const [levelNumber, setLevelNumber] = useState(1);
-  const engineRef = useRef<GameEngine>(newEngine(levelNumber));
+  const [selectedCategory, setSelectedCategory] = useState<GameCategory | null>(null);
+  const activeCategory = selectedCategory ?? defaultCategory;
+  const engineRef = useRef<GameEngine>(newEngine(defaultCategory, levelNumber));
   const [gameState, setGameState] = useState(() => engineRef.current.getState());
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [rescueTargeting, setRescueTargeting] = useState(false);
@@ -52,6 +59,7 @@ export default function App() {
   const [infoCell, setInfoCell] = useState<Cell | null>(null);
   const [showConnections, setShowConnections] = useState(false);
   const [showHowToPlay, setShowHowToPlay] = useState(true);
+  const [showCategorySelect, setShowCategorySelect] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState(0);
 
@@ -278,10 +286,28 @@ export default function App() {
   function handleRestart() {
     const next = levelNumber + 1;
     setLevelNumber(next);
-    engineRef.current = newEngine(next);
+    engineRef.current = newEngine(activeCategory, next);
     setSelectedIndex(null);
     setRescueTargeting(false);
     setToast(null);
+    refresh();
+  }
+
+  function handleCloseHowToPlay() {
+    setShowHowToPlay(false);
+    if (!selectedCategory) {
+      setShowCategorySelect(true);
+    }
+  }
+
+  function handleSelectCategory(category: GameCategory) {
+    setSelectedCategory(category);
+    setLevelNumber(1);
+    engineRef.current = newEngine(category, 1);
+    setSelectedIndex(null);
+    setRescueTargeting(false);
+    setToast(null);
+    setShowCategorySelect(false);
     refresh();
   }
 
@@ -332,7 +358,7 @@ export default function App() {
       </View>
       <View style={styles.subheader}>
         <Text style={styles.levelText}>
-          LEVEL {levelNumber}: {levelName}
+          {activeCategory.name.toUpperCase()} · LEVEL {levelNumber}: {levelName}
         </Text>
         <Text style={styles.scoreText}>SCORE: {gameState.score.toLocaleString()}</Text>
       </View>
@@ -373,7 +399,12 @@ export default function App() {
         />
       </ScrollView>
 
-      <TileInfoModal cell={infoCell} dataset={dataset} board={gameState.board} onClose={() => setInfoCell(null)} />
+      <TileInfoModal
+        cell={infoCell}
+        dataset={activeCategory.dataset}
+        board={gameState.board}
+        onClose={() => setInfoCell(null)}
+      />
       <ConnectionsListModal
         visible={showConnections}
         connections={connections}
@@ -394,7 +425,12 @@ export default function App() {
         onBuyWild={handleBuyWild}
         onEndGame={handleEndStuckGame}
       />
-      <HowToPlayModal visible={showHowToPlay} onClose={() => setShowHowToPlay(false)} />
+      <HowToPlayModal visible={showHowToPlay} onClose={handleCloseHowToPlay} />
+      <CategorySelectModal
+        visible={showCategorySelect}
+        categories={GAME_CATEGORIES}
+        onSelect={handleSelectCategory}
+      />
       <LeaderboardModal
         visible={showLeaderboard}
         onClose={() => setShowLeaderboard(false)}
