@@ -11,6 +11,7 @@ interface Props {
   dimmed?: boolean;
   showValue?: boolean;
   onPress?: () => void;
+  fontScale?: number;
 }
 
 const CONNECTOR_ACCENT: Record<"COLLAB" | "ARTIST" | "SAME_YEAR", string> = {
@@ -19,7 +20,7 @@ const CONNECTOR_ACCENT: Record<"COLLAB" | "ARTIST" | "SAME_YEAR", string> = {
   SAME_YEAR: colors.decade,
 };
 
-export function TileChip({ tile, size, role, selected, dimmed, showValue, onPress }: Props) {
+export function TileChip({ tile, size, role, selected, dimmed, showValue, onPress, fontScale = 0.2 }: Props) {
   const isArtist = tile.kind === "ARTIST";
   const isWildcard = tile.kind === "WILDCARD";
   const isConnector = tile.kind === "CONNECTOR";
@@ -57,7 +58,7 @@ export function TileChip({ tile, size, role, selected, dimmed, showValue, onPres
     >
       <Text
         numberOfLines={3}
-        style={[styles.label, { fontSize: Math.max(10, size * 0.2) }]}
+        style={[styles.label, { fontSize: Math.max(10, size * fontScale) }]}
       >
         {label}
       </Text>

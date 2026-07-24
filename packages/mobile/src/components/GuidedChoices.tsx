@@ -69,9 +69,6 @@ export function GuidedChoices({
           <Text style={styles.heading}>
             CHOOSE THE NEXT TILE · {step + 1}/{GUIDED_PATH_LENGTH}
           </Text>
-          <Text style={styles.instructions}>
-            One tile connects to the last tile. A miss ends the path.
-          </Text>
           {hintReason && (
             <View style={[styles.hint, { borderColor: CONNECTION_COLORS[hintReason] }]}>
               <Text style={[styles.hintText, { color: CONNECTION_COLORS[hintReason] }]}>
@@ -82,7 +79,7 @@ export function GuidedChoices({
           <View style={styles.choiceRow}>
             {choices.map((tile, index) => (
               <View key={`${tile.kind}-${tile.id}`} style={styles.choice}>
-                <TileChip tile={tile} size={82} showValue onPress={() => onChooseTile(index)} />
+                <TileChip tile={tile} size={82} fontScale={0.17} showValue onPress={() => onChooseTile(index)} />
                 <Text style={styles.kind}>{tile.kind}</Text>
               </View>
             ))}
@@ -106,6 +103,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 1,
     textAlign: "center",
+    marginBottom: 8,
   },
   instructions: {
     color: colors.textSecondary,
