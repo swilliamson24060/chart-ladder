@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -44,8 +43,17 @@ function newEngine(category: GameCategory, levelNumber: number, progress?: Guide
   return new GuidedGameEngine(category.dataset, Date.now() + levelNumber, progress);
 }
 
+const HEADER_HEIGHT = 60;
+const SUBHEADER_HEIGHT = 52;
+const CHOICES_RESERVED_HEIGHT = 155;
+const TOAST_MIN_HEIGHT = 38;
+const BOARD_GAP = 8;
+const CONTENT_VERTICAL_PADDING = 16;
+const MAX_BOARD_WIDTH = 520;
+const MIN_CELL_SIZE = 30;
+
 export default function App() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [levelNumber, setLevelNumber] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState<GameCategory | null>(null);
   const activeCategory = selectedCategory ?? defaultCategory;
@@ -64,8 +72,13 @@ export default function App() {
     loadSavedGame().then(setSavedGame).catch(() => setSavedGame(null));
   }, []);
 
-  const boardPixelWidth = Math.min(width - 24, 520);
-  const cellSize = Math.floor(boardPixelWidth / GRID_SIZE);
+  const chromeHeight = (Platform.OS === "web" ? 8 : 48) + HEADER_HEIGHT + SUBHEADER_HEIGHT;
+  const reservedHeight =
+    chromeHeight + CHOICES_RESERVED_HEIGHT + TOAST_MIN_HEIGHT + BOARD_GAP + CONTENT_VERTICAL_PADDING;
+  const availableBoardWidth = Math.max(0, width - 24);
+  const availableBoardHeight = Math.max(0, height - reservedHeight);
+  const boardPixelWidth = Math.min(availableBoardWidth, availableBoardHeight, MAX_BOARD_WIDTH);
+  const cellSize = Math.max(MIN_CELL_SIZE, Math.floor(boardPixelWidth / GRID_SIZE));
 
   function refresh() {
     setGameState(engineRef.current.getState());
@@ -245,7 +258,7 @@ export default function App() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <View style={styles.mainContent}>
         <View style={[styles.boardWrap, { width: cellSize * GRID_SIZE }]}>
           <BoardGrid
             board={gameState.board}
@@ -270,7 +283,7 @@ export default function App() {
             onGuessConnection={handleGuessConnection}
           />
         )}
-      </ScrollView>
+      </View>
 
       <TileInfoModal
         cell={infoCell}
@@ -415,13 +428,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: 2,
   },
-  scrollContent: {
+  mainContent: {
+    flex: 1,
+    width: "100%",
     alignItems: "center",
-    paddingVertical: 16,
-    paddingBottom: 40,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   boardWrap: {
-    marginBottom: 8,
+    flexShrink: 0,
+    marginBottom: BOARD_GAP,
   },
   toastSlot: {
     minHeight: 38,
