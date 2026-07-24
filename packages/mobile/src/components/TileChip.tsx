@@ -57,7 +57,7 @@ export function TileChip({ tile, size, role, selected, dimmed, showValue, onPres
     >
       <Text
         numberOfLines={3}
-        style={[styles.label, { fontSize: Math.max(8, size * 0.155) }]}
+        style={[styles.label, { fontSize: Math.max(10, size * 0.2) }]}
       >
         {label}
       </Text>

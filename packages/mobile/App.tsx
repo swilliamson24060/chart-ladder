@@ -43,14 +43,14 @@ function newEngine(category: GameCategory, levelNumber: number, progress?: Guide
   return new GuidedGameEngine(category.dataset, Date.now() + levelNumber, progress);
 }
 
-const HEADER_HEIGHT = 60;
-const SUBHEADER_HEIGHT = 52;
-const CHOICES_RESERVED_HEIGHT = 155;
-const TOAST_MIN_HEIGHT = 38;
+const HEADER_HEIGHT = 52;
+const SUBHEADER_HEIGHT = 44;
+const CHOICES_RESERVED_HEIGHT = 145;
+const TOAST_MIN_HEIGHT = 28;
 const BOARD_GAP = 8;
-const CONTENT_VERTICAL_PADDING = 16;
-const MAX_BOARD_WIDTH = 520;
-const MIN_CELL_SIZE = 30;
+const CONTENT_VERTICAL_PADDING = 8;
+const MAX_BOARD_WIDTH = 560;
+const MIN_CELL_SIZE = 34;
 
 export default function App() {
   const { width, height } = useWindowDimensions();
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: colors.headerBackground,
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 6,
     backgroundColor: "#0f1a33",
   },
   levelText: {
@@ -434,14 +434,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
   boardWrap: {
     flexShrink: 0,
     marginBottom: BOARD_GAP,
   },
   toastSlot: {
-    minHeight: 38,
+    minHeight: 28,
     maxWidth: 420,
     paddingHorizontal: 12,
     alignItems: "center",

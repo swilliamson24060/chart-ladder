@@ -112,8 +112,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     textAlign: "center",
-    marginTop: 4,
-    marginBottom: 10,
+    marginTop: 2,
+    marginBottom: 6,
   },
   choiceRow: {
     flexDirection: "row",
