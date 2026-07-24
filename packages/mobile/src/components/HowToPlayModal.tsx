@@ -10,11 +10,10 @@ import {
   View,
 } from "react-native";
 import {
-  CHART_BOOST_FLAT_BONUS,
   decadePoints,
-  REASON_POINTS,
-  WILD_TILE_COST,
-  WRONG_CONNECTOR_PENALTY,
+  GUIDED_CONNECTION_BONUS,
+  GUIDED_PATH_LENGTH,
+  GUIDED_TILE_POINTS,
 } from "@chartcross/engine";
 import { colors } from "../theme";
 
@@ -23,29 +22,11 @@ interface Props {
   onClose: () => void;
 }
 
-function Section({
-  title,
-  color,
-  children,
-}: {
-  title: string;
-  color?: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, color ? { color } : null]}>{title}</Text>
+      <Text style={styles.sectionTitle}>{title}</Text>
       {children}
-    </View>
-  );
-}
-
-function ScoreRow({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <View style={styles.scoreRow}>
-      <View style={[styles.dot, { backgroundColor: color }]} />
-      <Text style={styles.scoreLabel}>{label}</Text>
-      <Text style={[styles.scoreValue, { color }]}>{value}</Text>
     </View>
   );
 }
@@ -59,18 +40,8 @@ export function HowToPlayModal({ visible, onClose }: Props) {
     setCanScrollMore(contentHeight - scrollY - viewportHeight > 8);
   }
 
-  function handleScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    metrics.current.scrollY = e.nativeEvent.contentOffset.y;
-    recomputeScrollHint();
-  }
-
-  function handleLayout(e: { nativeEvent: { layout: { height: number } } }) {
-    metrics.current.viewportHeight = e.nativeEvent.layout.height;
-    recomputeScrollHint();
-  }
-
-  function handleContentSizeChange(_width: number, height: number) {
-    metrics.current.contentHeight = height;
+  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    metrics.current.scrollY = event.nativeEvent.contentOffset.y;
     recomputeScrollHint();
   }
 
@@ -83,7 +54,7 @@ export function HowToPlayModal({ visible, onClose }: Props) {
           <View style={styles.headerRow}>
             <Text style={styles.title}>HOW TO PLAY</Text>
             <Pressable onPress={onClose} hitSlop={10}>
-              <Text style={styles.closeText}>✕</Text>
+              <Text style={styles.closeText}>×</Text>
             </Pressable>
           </View>
 
@@ -92,85 +63,74 @@ export function HowToPlayModal({ visible, onClose }: Props) {
               style={styles.scroll}
               showsVerticalScrollIndicator={false}
               onScroll={handleScroll}
-              onLayout={handleLayout}
-              onContentSizeChange={handleContentSizeChange}
+              onLayout={(event) => {
+                metrics.current.viewportHeight = event.nativeEvent.layout.height;
+                recomputeScrollHint();
+              }}
+              onContentSizeChange={(_width, height) => {
+                metrics.current.contentHeight = height;
+                recomputeScrollHint();
+              }}
               scrollEventThrottle={32}
             >
-            <Section title="GOAL">
-              <Text style={styles.body}>
-                Place tiles from your rack onto the board to rack up points. Careful — the game
-                can end suddenly, and when it does, it costs you.
-              </Text>
-            </Section>
+              <Section title="BUILD THE PATH">
+                <Text style={styles.body}>
+                  Connect the START artist to the ANCHOR artist by finding all {GUIDED_PATH_LENGTH} tiles
+                  in the prepared path. Correct tiles are placed on the board automatically.
+                </Text>
+              </Section>
 
-            <Section title="PLACING TILES">
-              <Text style={styles.body}>
-                Tap a rack tile, then tap a highlighted cell two squares away from a tile already
-                on the board, in a straight line, with an empty gap between them.
-              </Text>
-            </Section>
+              <Section title="CHOOSE A TILE">
+                <Text style={styles.body}>
+                  Each step presents three artists or songs from your selected category. Exactly one
+                  connects to the last tile on the path. A correct choice starts with{" "}
+                  {GUIDED_TILE_POINTS} points.
+                </Text>
+              </Section>
 
-            <Section title="GUESS THE CONNECTION">
-              <Text style={styles.body}>
-                Placing a real tile doesn't score yet — you still have to fill the gap. Pick one
-                of the three always-available connector tiles below the board and guess how the
-                two tiles relate:
-              </Text>
-              <ScoreRow label="Collab Connect" value={`+${REASON_POINTS.COLLAB}`} color={colors.collab} />
-              <ScoreRow label="Artist Connect" value={`+${REASON_POINTS.ARTIST}`} color={colors.connectorArtist} />
-              <ScoreRow label="Decade Connect" value={`+${REASON_POINTS.DECADE}`} color={colors.decade} />
-              <Text style={styles.body}>
-                Guess wrong and you lose {WRONG_CONNECTOR_PENALTY} points, but the gap stays open
-                — just try a different connector. The connector tiles themselves never run out.
-              </Text>
-              <Text style={styles.body}>
-                Not sure? A ★ Wild connector (bought with ✨ BUY WILD) always fills the gap
-                correctly for +{REASON_POINTS.WILDCARD} connection points — a guaranteed rescue,
-                not a scoring play. Wildcards can only ever be used this way, never placed as a
-                rack tile.
-              </Text>
-            </Section>
+              <Section title="TILE VALUES">
+                <Text style={styles.body}>
+                  Every correct tile also adds its decade value: a 2020s tile is worth{" "}
+                  {decadePoints(2023)} extra point, increasing by one per decade back to{" "}
+                  {decadePoints(1958)} points for the 1950s. For artists spanning several decades,
+                  the most recent decade determines the value.
+                </Text>
+                <Text style={styles.body}>
+                  The START artist's value is added to the first connection. The ANCHOR artist's
+                  value is added to the fifth and final connection.
+                </Text>
+              </Section>
 
-            <Section title="SCORING">
-              <Text style={styles.body}>
-                Every tile also carries its own Point Value (the badge on rack tiles), based on
-                the decade it charted in — 2020s is worth {decadePoints(2023)}, all the way back
-                to the 1950s at {decadePoints(1958)}. Older is worth more. This value is added on
-                top of the connection score once you guess correctly.
-              </Text>
-              <Text style={styles.body}>
-                Landing on a 2X or 3X SONG/ARTIST cell multiplies your connection score if the
-                tile type matches. CHART BOOST adds a flat +{CHART_BOOST_FLAT_BONUS}. Multipliers
-                never apply to connector tiles (Wild included) — if one ends up on a gap cell, it
-                hops to a fresh spot on the board instead of going to waste.
-              </Text>
-            </Section>
+              <Section title="CONNECTION BONUS">
+                <Text style={styles.body}>
+                  After choosing the correct tile, identify whether the connection is COLLAB, ARTIST,
+                  or DECADE. A correct answer adds {GUIDED_CONNECTION_BONUS} bonus points.
+                </Text>
+                <Text style={styles.body}>
+                  A wrong connection answer reveals the correct answer and forfeits only the bonus.
+                  Your correct tile still earns its base and decade-value points, and the path continues.
+                </Text>
+              </Section>
 
-            <Section title="GAME OVER — WATCH OUT" color={colors.illegal}>
-              <Text style={styles.body}>
-                The game ends immediately, and you lose points equal to the total value of every
-                tile left in your rack, if STARTER and ANCHOR become linked by a path of
-                touching tiles — even tiles that don't score anything together.
-              </Text>
-              <Text style={styles.body}>
-                Running out of legal moves doesn't end the game outright anymore. If you're
-                holding a ★ Wild connector, you get a rescue: tap the ★ WILD chip, tap an empty
-                board cell next to any placed tile with empty space beyond it, then place any rack
-                tile there for free (no points). If you're not holding one, you're asked to either
-                buy one to open up a rescue, or end the game right there and take the penalty.
-              </Text>
-            </Section>
+              <Section title="HINT">
+                <Text style={styles.body}>
+                  Tap the light bulb before choosing a tile to reveal the connection type. You can
+                  still earn the {GUIDED_TILE_POINTS} tile points, but the {GUIDED_CONNECTION_BONUS}-point
+                  connection bonus is forfeited for that step.
+                </Text>
+              </Section>
 
-            <Section title="TOOLS">
-              <Text style={styles.bullet}>💡 HINT — selects a playable tile and highlights where it can go.</Text>
-              <Text style={styles.bullet}>⇄ SHUFFLE — reorders your rack.</Text>
-              <Text style={styles.bullet}>
-                ✨ BUY WILD ({WILD_TILE_COST}) — spend points for a ★ Wild connector charge, usable
-                any time to resolve a pending guess for free.
-              </Text>
-              <Text style={styles.bullet}>📊 CONNECTIONS — view every scored connection on the board.</Text>
-              <Text style={styles.bullet}>Tap any placed tile to see its full details.</Text>
-            </Section>
+              <Section title="FINISH">
+                <Text style={styles.body}>
+                  A wrong artist/song choice earns 0 base points, but the correct tile is placed and
+                  you may still try for the connection bonus. The session ends after five tile misses.
+                </Text>
+                <Text style={styles.body}>
+                  Complete all {GUIDED_PATH_LENGTH} steps to finish a path. You can add another round
+                  to the same score, end and submit, or save at the completed path and resume later.
+                  There are no 2X or 3X board spaces.
+                </Text>
+              </Section>
             </ScrollView>
             {canScrollMore && (
               <View style={styles.scrollHint} pointerEvents="none">
@@ -180,7 +140,7 @@ export function HowToPlayModal({ visible, onClose }: Props) {
           </View>
 
           <Pressable style={styles.button} onPress={onClose}>
-            <Text style={styles.buttonText}>START PLAYING</Text>
+            <Text style={styles.buttonText}>CHOOSE A CATEGORY</Text>
           </Pressable>
         </View>
       </View>
@@ -191,7 +151,7 @@ export function HowToPlayModal({ visible, onClose }: Props) {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(5, 8, 18, 0.8)",
+    backgroundColor: "rgba(5, 8, 18, 0.82)",
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
@@ -220,7 +180,7 @@ const styles = StyleSheet.create({
   },
   closeText: {
     color: colors.textSecondary,
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "700",
   },
   scrollWrap: {
@@ -251,7 +211,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    color: colors.textPrimary,
+    color: colors.song,
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1,
@@ -262,33 +222,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 6,
-  },
-  bullet: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 4,
-  },
-  scoreRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  scoreLabel: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  scoreValue: {
-    fontSize: 13,
-    fontWeight: "800",
   },
   button: {
     backgroundColor: colors.artist,

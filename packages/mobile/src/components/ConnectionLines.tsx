@@ -1,21 +1,22 @@
 import React from "react";
 import Svg, { Line } from "react-native-svg";
-import { Board, getAllConnections, GRID_SIZE } from "@chartcross/engine";
+import { Board, getAllConnections, GRID_SIZE, type GuidedPathConnection } from "@chartcross/engine";
 import { connectionColors } from "../theme";
 
 interface Props {
   board: Board;
   cellSize: number;
+  pathConnections?: GuidedPathConnection[];
 }
 
-export function ConnectionLines({ board, cellSize }: Props) {
+export function ConnectionLines({ board, cellSize, pathConnections }: Props) {
   const size = cellSize * GRID_SIZE;
   const center = (row: number, col: number) => ({
     x: col * cellSize + cellSize / 2,
     y: row * cellSize + cellSize / 2,
   });
 
-  const lines = getAllConnections(board).map((c) => {
+  const lines = (pathConnections ?? getAllConnections(board)).map((c) => {
     const a = center(c.fromRow, c.fromCol);
     const b = center(c.toRow, c.toCol);
     return (

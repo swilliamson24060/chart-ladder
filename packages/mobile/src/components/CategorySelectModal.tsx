@@ -7,9 +7,16 @@ interface Props {
   visible: boolean;
   categories: GameCategory[];
   onSelect: (category: GameCategory) => void;
+  savedGame?: {
+    categoryName: string;
+    score: number;
+    misses: number;
+    roundsCompleted: number;
+  } | null;
+  onResume?: () => void;
 }
 
-export function CategorySelectModal({ visible, categories, onSelect }: Props) {
+export function CategorySelectModal({ visible, categories, onSelect, savedGame, onResume }: Props) {
   if (!visible) return null;
 
   return (
@@ -21,6 +28,19 @@ export function CategorySelectModal({ visible, categories, onSelect }: Props) {
           <Text style={styles.intro}>
             Your choice determines which Billboard songs and artists appear in this game.
           </Text>
+
+          {savedGame && onResume && (
+            <Pressable style={styles.resumeCard} onPress={onResume}>
+              <View style={styles.resumeCopy}>
+                <Text style={styles.resumeTitle}>RESUME SAVED GAME</Text>
+                <Text style={styles.resumeDetails}>
+                  {savedGame.categoryName} · {savedGame.score.toLocaleString()} pts ·{" "}
+                  {savedGame.misses}/5 misses
+                </Text>
+              </View>
+              <Text style={styles.arrow}>›</Text>
+            </Pressable>
+          )}
 
           <View style={styles.options}>
             {categories.map((category, index) => (
@@ -84,6 +104,30 @@ const styles = StyleSheet.create({
   },
   options: {
     gap: 10,
+  },
+  resumeCard: {
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.decade,
+    backgroundColor: colors.boardBackground,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 13,
+    marginBottom: 14,
+  },
+  resumeCopy: {
+    flex: 1,
+  },
+  resumeTitle: {
+    color: colors.decade,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  resumeDetails: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    marginTop: 4,
   },
   option: {
     minHeight: 72,

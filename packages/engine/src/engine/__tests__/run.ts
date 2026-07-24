@@ -15,10 +15,19 @@ import { buildDataIndex, findArtistCandidatesFor, findCollabCandidatesFor } from
 import { decadePoints, tileValue } from "../tileValue";
 import { getAllConnections } from "../connections";
 import {
+  GUIDED_CONNECTION_BONUS,
+  GUIDED_PATH_LENGTH,
+  GUIDED_PATH_POSITIONS,
+  GUIDED_TILE_POINTS,
+  GuidedGameEngine,
+  isSelfReferentialGuidedConnection,
+} from "../guidedGame";
+import {
   ArtistTile,
   SongTile,
   Dataset,
   ConnectionCategory,
+  CONNECTION_CATEGORIES,
   ConnectionEdge,
   GameStatus,
   MultiplierType,
@@ -1028,6 +1037,106 @@ console.log("\nMultiplier applied/missed reporting checks:");
   }
   check("Observed at least one applied-bonus placement across the seed sweep", sawApplied);
   check("Observed at least one missed-bonus placement across the seed sweep", sawMissed);
+}
+
+console.log("\nGuided five-tile path checks:");
+{
+  const engine = new GuidedGameEngine(dataset, 20260723);
+  let state = engine.getState();
+  check("Guided board starts without multiplier cells", state.board.flat().every((cell) => !cell.multiplier));
+  check("Guided turn offers exactly three choices", state.choices.length === 3);
+
+  for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
+    state = engine.getState();
+    const previousPosition = GUIDED_PATH_POSITIONS[step];
+    const previous = state.board[previousPosition.row][previousPosition.col].tile as ArtistTile | SongTile;
+    const correctIndex = state.choices.findIndex(
+      (choice) => bestConnectionReason(previous, choice) !== null,
+    );
+    const validChoices = state.choices.filter(
+      (choice) => bestConnectionReason(previous, choice) !== null,
+    );
+    check(`Step ${step + 1} has exactly one connecting choice`, validChoices.length === 1);
+    check(
+      `Step ${step + 1} correct choice is not self-referential`,
+      !isSelfReferentialGuidedConnection(previous, state.choices[correctIndex]),
+    );
+
+    if (step === 0) {
+      const hint = engine.useHint();
+      check("Hint reveals the connection type", hint === bestConnectionReason(previous, state.choices[correctIndex]));
+      const expected =
+        GUIDED_TILE_POINTS + tileValue(state.choices[correctIndex]) + tileValue(previous);
+      const result = engine.chooseTile(correctIndex);
+      check("First tile includes its value and the starter value", result.pointsAwarded === expected);
+    } else {
+      const choice = state.choices[correctIndex];
+      const correctReason = bestConnectionReason(previous, choice) as ConnectionCategory;
+      const choiceResult = engine.chooseTile(correctIndex);
+      check(`Step ${step + 1} waits for a connection guess`, choiceResult.needsConnectionGuess);
+      const guessedReason =
+        step === 1
+          ? CONNECTION_CATEGORIES.find((reason) => reason !== correctReason)!
+          : correctReason;
+      const guessResult = engine.guessConnection(guessedReason);
+      const anchorPosition = GUIDED_PATH_POSITIONS[GUIDED_PATH_POSITIONS.length - 1];
+      const anchor = state.board[anchorPosition.row][anchorPosition.col].tile!;
+      const expected =
+        GUIDED_TILE_POINTS +
+        tileValue(choice) +
+        (step === GUIDED_PATH_LENGTH - 1 ? tileValue(anchor) : 0) +
+        (step === 1 ? 0 : GUIDED_CONNECTION_BONUS);
+      check(`Step ${step + 1} awards the expected score`, guessResult.pointsAwarded === expected);
+      if (step === 1) {
+        check("Wrong connection guess reveals the correct reason", guessResult.correctReason === correctReason);
+        check("Wrong connection guess does not end the game", guessResult.status === "playing");
+      }
+    }
+  }
+
+  state = engine.getState();
+  check("Five correct tiles complete the guided path", state.status === "path-complete");
+  check("All five intermediate board rows contain their prepared tiles",
+    GUIDED_PATH_POSITIONS.slice(1, -1).every((position) => !!state.board[position.row][position.col].tile));
+  check("Completed route draws six connections including the anchor edge", state.completedConnections.length === 6);
+  check(
+    "Every completed path edge joins distinct performer identities",
+    GUIDED_PATH_POSITIONS.slice(0, -1).every((position, index) => {
+      const next = GUIDED_PATH_POSITIONS[index + 1];
+      return !isSelfReferentialGuidedConnection(
+        state.board[position.row][position.col].tile as ArtistTile | SongTile,
+        state.board[next.row][next.col].tile as ArtistTile | SongTile,
+      );
+    }),
+  );
+  const completedScore = state.score;
+  engine.startNextRound();
+  state = engine.getState();
+  check("Another round preserves the accumulated score", state.score === completedScore);
+  check("Another round starts a fresh five-tile path", state.status === "playing" && state.step === 0);
+  check("Completed-round count carries into the next round", state.roundsCompleted === 1);
+}
+
+{
+  const engine = new GuidedGameEngine(dataset, 20260724);
+  for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
+    const state = engine.getState();
+    const previousPosition = GUIDED_PATH_POSITIONS[step];
+    const previous = state.board[previousPosition.row][previousPosition.col].tile!;
+    const wrongIndex = state.choices.findIndex((choice) => bestConnectionReason(previous, choice) === null);
+    const result = engine.chooseTile(wrongIndex);
+    check(`Miss ${step + 1} places the correct tile for the player`, !!engine.getState().board[GUIDED_PATH_POSITIONS[step + 1].row][GUIDED_PATH_POSITIONS[step + 1].col].tile);
+    check(`Miss ${step + 1} awards no base points`, result.pointsAwarded === 0);
+    if (step < GUIDED_PATH_LENGTH - 1) {
+      check(`Miss ${step + 1} still offers the connection bonus`, result.needsConnectionGuess);
+      const correctTile = result.correctTile;
+      const correctReason = bestConnectionReason(previous, correctTile) as ConnectionCategory;
+      const bonus = engine.guessConnection(correctReason);
+      check(`Miss ${step + 1} can still earn the 10-point bonus`, bonus.pointsAwarded === GUIDED_CONNECTION_BONUS);
+    }
+  }
+  check("The fifth artist/song miss ends the guided session", engine.getState().status === "game-over");
+  check("The session tracks all five misses", engine.getState().misses === GUIDED_PATH_LENGTH);
 }
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);
