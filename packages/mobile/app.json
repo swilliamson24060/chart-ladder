@@ -22,7 +22,7 @@
       "favicon": "./assets/favicon.png"
     },
     "experiments": {
-      "baseUrl": "/chartcross-experiments"
+      "baseUrl": "/chartcross-next"
     }
   }
 }
