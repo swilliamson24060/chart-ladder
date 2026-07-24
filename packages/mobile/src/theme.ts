@@ -26,15 +26,15 @@ export const colors = {
   rackSlotBorder: "#2a3660",
 };
 
-export const connectionColors: Record<"DECADE" | "ARTIST" | "COLLAB" | "WILDCARD", string> = {
-  DECADE: colors.decade,
+export const connectionColors: Record<"SAME_YEAR" | "ARTIST" | "COLLAB" | "WILDCARD", string> = {
+  SAME_YEAR: colors.decade,
   ARTIST: colors.connectorArtist,
   COLLAB: colors.collab,
   WILDCARD: colors.wildcard,
 };
 
-export const connectorDim: Record<"DECADE" | "ARTIST" | "COLLAB", string> = {
-  DECADE: "#1e4230",
+export const connectorDim: Record<"SAME_YEAR" | "ARTIST" | "COLLAB", string> = {
+  SAME_YEAR: "#1e4230",
   ARTIST: "#4a3016",
   COLLAB: colors.artistDim,
 };

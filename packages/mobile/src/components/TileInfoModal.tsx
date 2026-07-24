@@ -19,8 +19,8 @@ interface Props {
   onClose: () => void;
 }
 
-function decadeList(decades: number[]): string {
-  return decades.map((d) => `${d}s`).join(", ");
+function yearList(years: number[]): string {
+  return years.join(", ");
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -84,21 +84,21 @@ export function TileInfoModal({ cell, dataset, board, onClose }: Props) {
     if (isMatchable(contentTile) && isMatchable(anchorTile)) {
       const explanation = explainConnection(contentTile, anchorTile, tile.connectionType, dataset);
 
-      if (explanation.reason === "DECADE") {
-        const sharedSet = new Set(explanation.sharedDecades);
-        const otherA = explanation.tileADecades.filter((d) => !sharedSet.has(d));
-        const otherB = explanation.tileBDecades.filter((d) => !sharedSet.has(d));
+      if (explanation.reason === "SAME_YEAR") {
+        const sharedSet = new Set(explanation.sharedYears);
+        const otherA = explanation.tileAYears.filter((year) => !sharedSet.has(year));
+        const otherB = explanation.tileBYears.filter((year) => !sharedSet.has(year));
         rows = [
           {
-            label: explanation.sharedDecades.length > 1 ? "Matched decades" : "Matched decade",
-            value: decadeList(explanation.sharedDecades),
+            label: explanation.sharedYears.length > 1 ? "Matched years" : "Matched year",
+            value: yearList(explanation.sharedYears),
           },
         ];
         if (otherA.length > 0) {
-          rows.push({ label: tileLabel(contentTile), value: `Also charted in the ${decadeList(otherA)}` });
+          rows.push({ label: tileLabel(contentTile), value: `Also charted in ${yearList(otherA)}` });
         }
         if (otherB.length > 0) {
-          rows.push({ label: tileLabel(anchorTile), value: `Also charted in the ${decadeList(otherB)}` });
+          rows.push({ label: tileLabel(anchorTile), value: `Also charted in ${yearList(otherB)}` });
         }
       } else if (explanation.reason === "COLLAB") {
         rows = [

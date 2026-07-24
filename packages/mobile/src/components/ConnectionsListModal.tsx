@@ -10,7 +10,7 @@ interface Props {
 }
 
 const REASON_TITLES: Record<BoardConnection["reason"], string> = {
-  DECADE: "Decade Connect",
+  SAME_YEAR: "Same Year Connect",
   ARTIST: "Artist Connect",
   COLLAB: "Collab Connect",
   WILDCARD: "Wildcard",

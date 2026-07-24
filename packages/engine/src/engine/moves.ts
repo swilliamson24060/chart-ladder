@@ -1,7 +1,9 @@
 import { ConnectionReason, MatchableTile, REASON_POINTS, Tile } from "./types";
 
-function tileYears(tile: MatchableTile): number[] {
-  return tile.kind === "SONG" ? [tile.peakYear] : tile.years;
+/** Every exact chart year represented by a tile, deduped and sorted ascending. */
+export function tileYears(tile: MatchableTile): number[] {
+  const years = tile.kind === "SONG" ? [tile.peakYear] : tile.years;
+  return [...new Set(years)].sort((a, b) => a - b);
 }
 
 function tileDecadesRaw(tile: MatchableTile): number[] {
@@ -43,8 +45,8 @@ function isSameArtist(a: MatchableTile, b: MatchableTile): boolean {
   return false;
 }
 
-function isSameDecade(a: MatchableTile, b: MatchableTile): boolean {
-  return intersects(tileDecades(a), tileDecades(b));
+function isSameYear(a: MatchableTile, b: MatchableTile): boolean {
+  return intersects(tileYears(a), tileYears(b));
 }
 
 /**
@@ -66,7 +68,7 @@ export function bestConnectionReason(a: Tile, b: Tile): ConnectionReason | null 
   }
   if (isCollab(a, b)) return "COLLAB";
   if (isSameArtist(a, b)) return "ARTIST";
-  if (isSameDecade(a, b)) return "DECADE";
+  if (isSameYear(a, b)) return "SAME_YEAR";
   return null;
 }
 

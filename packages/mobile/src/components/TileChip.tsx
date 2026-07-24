@@ -13,10 +13,10 @@ interface Props {
   onPress?: () => void;
 }
 
-const CONNECTOR_ACCENT: Record<"COLLAB" | "ARTIST" | "DECADE", string> = {
+const CONNECTOR_ACCENT: Record<"COLLAB" | "ARTIST" | "SAME_YEAR", string> = {
   COLLAB: colors.collab,
   ARTIST: colors.connectorArtist,
-  DECADE: colors.decade,
+  SAME_YEAR: colors.decade,
 };
 
 export function TileChip({ tile, size, role, selected, dimmed, showValue, onPress }: Props) {

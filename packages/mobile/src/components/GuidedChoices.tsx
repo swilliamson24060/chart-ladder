@@ -21,13 +21,13 @@ interface Props {
 const CONNECTION_LABELS: Record<ConnectionCategory, string> = {
   COLLAB: "COLLAB",
   ARTIST: "ARTIST",
-  DECADE: "DECADE",
+  SAME_YEAR: "SAME YEAR",
 };
 
 const CONNECTION_COLORS: Record<ConnectionCategory, string> = {
   COLLAB: colors.collab,
   ARTIST: colors.connectorArtist,
-  DECADE: colors.decade,
+  SAME_YEAR: colors.decade,
 };
 
 export function GuidedChoices({

@@ -1,13 +1,13 @@
-import { tileDecades } from "./moves";
+import { tileYears } from "./moves";
 import { ConnectionReason, Dataset, MatchableTile, SongTile } from "./types";
 
-export interface DecadeExplanation {
-  reason: "DECADE";
-  /** This tile's full charted-decade list (one entry for a SONG, one per distinct decade across a career for an ARTIST), sorted ascending. */
-  tileADecades: number[];
-  tileBDecades: number[];
-  /** The decade(s) both tiles share - always non-empty for a real DECADE connection. */
-  sharedDecades: number[];
+export interface SameYearExplanation {
+  reason: "SAME_YEAR";
+  /** Each tile's exact chart years, sorted ascending. */
+  tileAYears: number[];
+  tileBYears: number[];
+  /** The exact year(s) both tiles share - always non-empty for a real SAME_YEAR connection. */
+  sharedYears: number[];
 }
 
 export interface ArtistExplanation {
@@ -30,7 +30,7 @@ export interface WildcardExplanation {
 }
 
 export type ConnectionExplanation =
-  | DecadeExplanation
+  | SameYearExplanation
   | ArtistExplanation
   | CollabExplanation
   | WildcardExplanation;
@@ -51,14 +51,14 @@ export function explainConnection(
     return { reason: "WILDCARD" };
   }
 
-  if (reason === "DECADE") {
-    const tileADecades = tileDecades(tileA);
-    const tileBDecades = tileDecades(tileB);
+  if (reason === "SAME_YEAR") {
+    const tileAYears = tileYears(tileA);
+    const tileBYears = tileYears(tileB);
     return {
-      reason: "DECADE",
-      tileADecades,
-      tileBDecades,
-      sharedDecades: intersect(tileADecades, tileBDecades),
+      reason: "SAME_YEAR",
+      tileAYears,
+      tileBYears,
+      sharedYears: intersect(tileAYears, tileBYears),
     };
   }
 

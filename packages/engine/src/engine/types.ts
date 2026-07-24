@@ -38,9 +38,9 @@ export interface WildcardTile {
 }
 
 /** One of the three always-available connection-type tiles. */
-export type ConnectionCategory = "COLLAB" | "ARTIST" | "DECADE";
+export type ConnectionCategory = "COLLAB" | "ARTIST" | "SAME_YEAR";
 
-export const CONNECTION_CATEGORIES: ConnectionCategory[] = ["COLLAB", "ARTIST", "DECADE"];
+export const CONNECTION_CATEGORIES: ConnectionCategory[] = ["COLLAB", "ARTIST", "SAME_YEAR"];
 
 export interface ConnectorTile {
   kind: "CONNECTOR";
@@ -94,7 +94,7 @@ export type GameStatus = "playing" | "bridged" | "stuck";
 export type ConnectionReason = ConnectionCategory | "WILDCARD";
 
 export const REASON_POINTS: Record<ConnectionReason, number> = {
-  DECADE: 5,
+  SAME_YEAR: 5,
   ARTIST: 12,
   COLLAB: 20,
   WILDCARD: 0,

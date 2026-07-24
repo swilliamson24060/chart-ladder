@@ -1,6 +1,6 @@
 import { createEmptyBoard, END_ANCHOR_POS, placeStarterAndAnchor, STARTER_POS } from "./board";
 import { buildDataIndex, DataIndex, findArtistCandidatesFor, findCollabCandidatesFor } from "./dataIndex";
-import { bestConnectionReason, tileDecades } from "./moves";
+import { bestConnectionReason, tileYears } from "./moves";
 import { createRng, pickRandom, randomInt } from "./rng";
 import { tileValue } from "./tileValue";
 import {
@@ -84,7 +84,7 @@ interface Route {
 interface RouteIndex {
   dataIndex: DataIndex;
   allTiles: MatchableTile[];
-  byDecade: Map<number, MatchableTile[]>;
+  byYear: Map<number, MatchableTile[]>;
 }
 
 const routeIndexCache = new WeakMap<Dataset, RouteIndex>();
@@ -125,16 +125,16 @@ function routeIndex(dataset: Dataset): RouteIndex {
   if (cached) return cached;
 
   const allTiles: MatchableTile[] = [...dataset.artists, ...dataset.songs];
-  const byDecade = new Map<number, MatchableTile[]>();
+  const byYear = new Map<number, MatchableTile[]>();
   for (const tile of allTiles) {
-    for (const decade of tileDecades(tile)) {
-      const bucket = byDecade.get(decade) ?? [];
+    for (const year of tileYears(tile)) {
+      const bucket = byYear.get(year) ?? [];
       bucket.push(tile);
-      byDecade.set(decade, bucket);
+      byYear.set(year, bucket);
     }
   }
 
-  const result = { dataIndex: buildDataIndex(dataset), allTiles, byDecade };
+  const result = { dataIndex: buildDataIndex(dataset), allTiles, byYear };
   routeIndexCache.set(dataset, result);
   return result;
 }
@@ -146,15 +146,15 @@ function relatedCandidates(
 ): Record<ConnectionCategory, MatchableTile[]> {
   const collab = findCollabCandidatesFor(tile, dataset) as MatchableTile[];
   const artist = [...findArtistCandidatesFor(tile, dataset, index.dataIndex)] as MatchableTile[];
-  const decadeMap = new Map<string, MatchableTile>();
-  for (const decade of tileDecades(tile)) {
-    for (const candidate of index.byDecade.get(decade) ?? []) {
-      if (bestConnectionReason(tile, candidate) === "DECADE") {
-        decadeMap.set(tileKey(candidate), candidate);
+  const sameYearMap = new Map<string, MatchableTile>();
+  for (const year of tileYears(tile)) {
+    for (const candidate of index.byYear.get(year) ?? []) {
+      if (bestConnectionReason(tile, candidate) === "SAME_YEAR") {
+        sameYearMap.set(tileKey(candidate), candidate);
       }
     }
   }
-  return { COLLAB: collab, ARTIST: artist, DECADE: [...decadeMap.values()] };
+  return { COLLAB: collab, ARTIST: artist, SAME_YEAR: [...sameYearMap.values()] };
 }
 
 function chooseRelated(

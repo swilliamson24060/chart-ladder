@@ -153,6 +153,37 @@ console.log("Mockup scenario checks:");
     bestConnectionReason(amyWinehouse, uptownFunk) !== "COLLAB" &&
       bestConnectionReason(amyWinehouse, uptownFunk) !== "ARTIST",
   );
+
+  const sameYearA: SongTile = {
+    kind: "SONG",
+    id: "same-year-a",
+    title: "Same Year A",
+    performerIds: ["same-year-artist-a"],
+    peakYear: 1999,
+    peakPos: 10,
+    debutYear: 1999,
+  };
+  const sameYearB: SongTile = {
+    kind: "SONG",
+    id: "same-year-b",
+    title: "Same Year B",
+    performerIds: ["same-year-artist-b"],
+    peakYear: 1999,
+    peakPos: 20,
+    debutYear: 1999,
+  };
+  const sameDecadeDifferentYear: SongTile = {
+    kind: "SONG",
+    id: "same-decade-different-year",
+    title: "Same Decade, Different Year",
+    performerIds: ["same-year-artist-c"],
+    peakYear: 1994,
+    peakPos: 30,
+    debutYear: 1994,
+  };
+  check("Two unrelated tiles from the same exact year connect via SAME_YEAR", bestConnectionReason(sameYearA, sameYearB) === "SAME_YEAR");
+  check("Two unrelated tiles in the same decade but different years do not connect", bestConnectionReason(sameYearA, sameDecadeDifferentYear) === null);
+  check("Same Year connection keeps the former lowest-tier point value", connectionPoints("SAME_YEAR") === 5);
 }
 
 console.log("\nBridging (pure touching, independent of any real connection):");
@@ -291,7 +322,7 @@ console.log("\nGap-placement + connector guessing:");
     if (moves.length === 0) continue;
     const move = moves[0];
     const required = move.edges[0].reason as ConnectionCategory;
-    const wrongGuess = (["COLLAB", "ARTIST", "DECADE"] as ConnectionCategory[]).find((c) => c !== required)!;
+    const wrongGuess = (["COLLAB", "ARTIST", "SAME_YEAR"] as ConnectionCategory[]).find((c) => c !== required)!;
 
     const placeResult = engine.placeTile(i, move.row, move.col);
     check("Placing a tile two cells from a matching anchor is legal", placeResult.legal === true);

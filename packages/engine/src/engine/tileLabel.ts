@@ -3,7 +3,7 @@ import { Tile } from "./types";
 const CONNECTOR_LABELS: Record<string, string> = {
   COLLAB: "Collab Connect",
   ARTIST: "Artist Connect",
-  DECADE: "Decade Connect",
+  SAME_YEAR: "Same Year Connect",
 };
 
 export function tileLabel(tile: Tile): string {

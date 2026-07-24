@@ -18,13 +18,13 @@ interface Props {
 const LABELS: Record<ConnectionCategory, string> = {
   COLLAB: "COLLAB\nCONNECT",
   ARTIST: "ARTIST\nCONNECT",
-  DECADE: "DECADE\nCONNECT",
+  SAME_YEAR: "SAME YEAR\nCONNECT",
 };
 
 const ACCENT: Record<ConnectionCategory, string> = {
   COLLAB: colors.collab,
   ARTIST: colors.connectorArtist,
-  DECADE: colors.decade,
+  SAME_YEAR: colors.decade,
 };
 
 /**

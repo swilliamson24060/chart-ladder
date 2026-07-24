@@ -104,7 +104,7 @@ export function HowToPlayModal({ visible, onClose }: Props) {
               <Section title="CONNECTION BONUS">
                 <Text style={styles.body}>
                   After choosing the correct tile, identify whether the connection is COLLAB, ARTIST,
-                  or DECADE. A correct answer adds {GUIDED_CONNECTION_BONUS} bonus points.
+                  or SAME YEAR. A correct answer adds {GUIDED_CONNECTION_BONUS} bonus points.
                 </Text>
                 <Text style={styles.body}>
                   A wrong connection answer reveals the correct answer and forfeits only the bonus.
