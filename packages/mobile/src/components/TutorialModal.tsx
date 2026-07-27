@@ -29,7 +29,10 @@ interface Props {
 // easier to design a coherent explanation around than a fresh random one.
 const TUTORIAL_SEED = 20260101;
 const SELECT_TILE_DELAY = 900;
-const SELECT_CONNECTION_DELAY = 900;
+// The connection-category highlight is the last thing shown before the
+// explanation card, so it needs to sit on screen long enough to actually
+// read - at least 5 seconds per the beginner-pacing requirement.
+const SELECT_CONNECTION_DELAY = 5000;
 
 type Phase = "select-tile" | "select-connection" | "explain" | "done";
 
