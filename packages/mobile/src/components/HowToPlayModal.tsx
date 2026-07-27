@@ -20,6 +20,7 @@ import { colors } from "../theme";
 interface Props {
   visible: boolean;
   onClose: () => void;
+  onWatchTutorial: () => void;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -31,7 +32,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export function HowToPlayModal({ visible, onClose }: Props) {
+export function HowToPlayModal({ visible, onClose, onWatchTutorial }: Props) {
   const [canScrollMore, setCanScrollMore] = useState(false);
   const metrics = useRef({ scrollY: 0, viewportHeight: 0, contentHeight: 0 });
 
@@ -139,6 +140,9 @@ export function HowToPlayModal({ visible, onClose }: Props) {
             )}
           </View>
 
+          <Pressable style={styles.secondaryButton} onPress={onWatchTutorial}>
+            <Text style={styles.secondaryButtonText}>▶ WATCH TUTORIAL</Text>
+          </Pressable>
           <Pressable style={styles.button} onPress={onClose}>
             <Text style={styles.buttonText}>CHOOSE A CATEGORY</Text>
           </Pressable>
@@ -233,5 +237,19 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "800",
     letterSpacing: 1,
+  },
+  secondaryButton: {
+    borderWidth: 1.5,
+    borderColor: colors.artist,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  secondaryButtonText: {
+    color: colors.artist,
+    fontWeight: "800",
+    letterSpacing: 1,
+    fontSize: 13,
   },
 });

@@ -32,6 +32,7 @@ import { LeaderboardModal } from "./src/components/LeaderboardModal";
 import { MissedTileModal } from "./src/components/MissedTileModal";
 import { RoundCompleteModal } from "./src/components/RoundCompleteModal";
 import { TileInfoModal } from "./src/components/TileInfoModal";
+import { TutorialModal } from "./src/components/TutorialModal";
 import {
   clearSavedGame,
   loadSavedGame,
@@ -62,6 +63,7 @@ export default function App() {
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [infoCell, setInfoCell] = useState<Cell | null>(null);
   const [showHowToPlay, setShowHowToPlay] = useState(true);
+  const [showTutorial, setShowTutorial] = useState(false);
   const [showCategorySelect, setShowCategorySelect] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState(0);
@@ -162,6 +164,16 @@ export default function App() {
     if (!selectedCategory) setShowCategorySelect(true);
   }
 
+  function handleWatchTutorial() {
+    setShowHowToPlay(false);
+    setShowTutorial(true);
+  }
+
+  function handleFinishTutorial() {
+    setShowTutorial(false);
+    if (!selectedCategory) setShowCategorySelect(true);
+  }
+
   function handleSelectCategory(category: GameCategory) {
     setSelectedCategory(category);
     setLevelNumber(1);
@@ -240,6 +252,9 @@ export default function App() {
           <Pressable style={styles.headerIconButton} onPress={() => setShowLeaderboard(true)} hitSlop={8}>
             <Text style={styles.headerIconText}>🏆</Text>
           </Pressable>
+          <Pressable style={styles.headerIconButton} onPress={() => setShowTutorial(true)} hitSlop={8}>
+            <Text style={styles.headerIconText}>🎓</Text>
+          </Pressable>
           <Pressable style={styles.headerIconButton} onPress={() => setShowHowToPlay(true)} hitSlop={8}>
             <Text style={styles.helpText}>?</Text>
           </Pressable>
@@ -317,7 +332,8 @@ export default function App() {
         onSave={handleSaveAndExit}
         onEnd={handleEndSession}
       />
-      <HowToPlayModal visible={showHowToPlay} onClose={handleCloseHowToPlay} />
+      <HowToPlayModal visible={showHowToPlay} onClose={handleCloseHowToPlay} onWatchTutorial={handleWatchTutorial} />
+      <TutorialModal visible={showTutorial} onFinish={handleFinishTutorial} />
       <CategorySelectModal
         visible={showCategorySelect}
         categories={GAME_CATEGORIES}
@@ -361,7 +377,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   headerActions: {
-    width: 76,
+    width: 108,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
