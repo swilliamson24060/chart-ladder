@@ -98,7 +98,8 @@ export function GuidedChoices({
 const styles = StyleSheet.create({
   wrap: {
     width: "100%",
-    maxWidth: 420,
+    // Wide enough that three double-width tiles never wrap to a second row.
+    maxWidth: 480,
     alignItems: "center",
     paddingHorizontal: 12,
   },

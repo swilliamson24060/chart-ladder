@@ -53,6 +53,15 @@ export function BoardGrid({
               />
             );
           })}
+          {/* One extra visual-only square per row (no game cell behind it) so
+              the rightmost tile's overflow lands on a real grid square
+              instead of blank margin. */}
+          <View
+            style={[
+              styles.cell,
+              { width: cellSize, height: cellSize, borderColor: colors.cellBorder, backgroundColor: colors.cellEmpty },
+            ]}
+          />
         </View>
       ))}
 
