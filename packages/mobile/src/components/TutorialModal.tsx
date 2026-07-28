@@ -227,13 +227,15 @@ export function TutorialModal({ visible, onFinish }: Props) {
               <View style={styles.explainCard}>
                 <Text style={styles.explainTitle}>PICK THE NEXT TILE</Text>
                 <Text style={styles.explainLine}>
-                  Each step gives you three artists or songs. Only one of them connects to the last tile
-                  placed on the path - by sharing a chart year, a performer, or an artist collaboration.
-                  The other two are decoys that don't connect at all.
+                  Each step gives you three artists or songs. Only one of them connects to{" "}
+                  {pending.step === 0 ? "the starter tile" : "the previously correct tile in the chain"} -
+                  by sharing a chart year, a performer, or an artist collaboration. The other two are
+                  decoys that don't connect at all.
                 </Text>
                 <Text style={styles.explainLine}>
                   Here, "{tileLabel(pending.chosenTile)}" (highlighted below) is the right pick because
-                  it connects to "{tileLabel(pending.previousTile)}", the last tile on the path.
+                  it connects to "{tileLabel(pending.previousTile)}",{" "}
+                  {pending.step === 0 ? "the starter tile" : "the previously correct tile in the chain"}.
                 </Text>
                 <View style={styles.choiceRow}>
                   {gameState.choices.map((tile, index) => (
@@ -307,6 +309,22 @@ export function TutorialModal({ visible, onFinish }: Props) {
                     •  {line} ({REASON_LABELS[pending.reason]})
                   </Text>
                 ))}
+                {pending.step === GUIDED_PATH_LENGTH - 1 && anchorEdge && (
+                  <>
+                    <Text style={styles.explainLine}>
+                      It also links automatically to the ANCHOR artist, "{tileLabel(pathAnchorTile)}":
+                    </Text>
+                    {explanationLines(
+                      pending.chosenTile,
+                      pathAnchorTile,
+                      anchorEdge.reason as ConnectionCategory,
+                    ).map((line, i) => (
+                      <Text key={`anchor-${i}`} style={styles.explainLine}>
+                        •  {line} ({REASON_LABELS[anchorEdge.reason as ConnectionCategory]})
+                      </Text>
+                    ))}
+                  </>
+                )}
                 <Text style={styles.explainScore}>Tile points: +{GUIDED_TILE_POINTS} pts</Text>
                 <Text style={styles.explainScore}>
                   Tile value: +{tileValue(pending.chosenTile)} pts (it's worth more the further back its decade is)
@@ -337,18 +355,24 @@ export function TutorialModal({ visible, onFinish }: Props) {
 
             {phase === "done" && (
               <View style={styles.explainCard}>
-                <Text style={styles.explainTitle}>That's the idea!</Text>
-                <Text style={styles.explainLine}>
-                  Each step, pick the tile that connects to the last one on the path, then name the
-                  connection - COLLAB, ARTIST, or SAME YEAR - for a bonus. Five wrong tiles ends the
-                  session, so use the 💡 hint if you're stuck (it costs that step's bonus).
+                <Text style={styles.explainTitle}>THE WHOLE CHAIN</Text>
+                <Text style={styles.explainLine}>Here's every link from STARTER to ANCHOR, start to finish:</Text>
+                {gameState.completedConnections.map((edge, i) => {
+                  const fromTile = gameState.board[edge.fromRow][edge.fromCol].tile as MatchableTile;
+                  const toTile = gameState.board[edge.toRow][edge.toCol].tile as MatchableTile;
+                  const reason = edge.reason as ConnectionCategory;
+                  const [line] = explanationLines(fromTile, toTile, reason);
+                  return (
+                    <Text key={i} style={styles.explainLine}>
+                      •  "{tileLabel(fromTile)}" → "{tileLabel(toTile)}" — {REASON_LABELS[reason]}
+                      {line ? `: ${line}` : ""}
+                    </Text>
+                  );
+                })}
+                <Text style={[styles.explainLine, { marginTop: 8 }]}>
+                  That's the idea! Five wrong tiles ends a real session, so use the 💡 hint if you're
+                  stuck (it costs that step's bonus).
                 </Text>
-                {anchorEdge && (
-                  <Text style={styles.explainLine}>
-                    The last tile also links automatically to the ANCHOR artist by{" "}
-                    {REASON_LABELS[anchorEdge.reason as ConnectionCategory]} - no guess needed for that one.
-                  </Text>
-                )}
                 <Pressable style={styles.button} onPress={onFinish}>
                   <Text style={styles.buttonText}>START PLAYING</Text>
                 </Pressable>
