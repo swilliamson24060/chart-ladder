@@ -28,11 +28,6 @@ interface Props {
 // Fixed seed + fixed category so every player sees the same scripted path -
 // easier to design a coherent explanation around than a fresh random one.
 const TUTORIAL_SEED = 20260101;
-const SELECT_TILE_DELAY = 900;
-// The connection-category highlight is the last thing shown before the
-// explanation card, so it needs to sit on screen long enough to actually
-// read - at least 5 seconds per the beginner-pacing requirement.
-const SELECT_CONNECTION_DELAY = 5000;
 
 type Phase = "select-tile" | "select-connection" | "explain" | "done";
 
@@ -108,7 +103,6 @@ export function TutorialModal({ visible, onFinish }: Props) {
   const [phase, setPhase] = useState<Phase>("select-tile");
   const [pending, setPending] = useState<PendingStep | null>(null);
   const [outcome, setOutcome] = useState<StepOutcome | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cardWidth = Math.min(width - 40, 440);
   const boardPixelWidth = Math.min(cardWidth - 36, 300);
@@ -123,75 +117,62 @@ export function TutorialModal({ visible, onFinish }: Props) {
     setPhase("select-tile");
   }, [visible]);
 
+  // Every phase transition here is player-paced (a Next tap), never a timer -
+  // this effect only computes *what to highlight* for the newly-entered
+  // "select-tile" phase; it never advances the phase itself.
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
+    if (!visible || !gameState || pending) return;
+    if (phase !== "select-tile") return;
 
-  useEffect(() => {
-    if (!visible || !gameState) return;
-    const engine = engineRef.current;
-    if (!engine) return;
-
-    if (phase === "select-tile") {
-      if (gameState.status !== "playing") {
-        setPhase("done");
-        return;
-      }
-      const previousTile = tileAt(gameState, gameState.step);
-      const found = findCorrectChoice(previousTile, gameState.choices);
-      if (!found) {
-        setPhase("done");
-        return;
-      }
-      setPending({
-        step: gameState.step,
-        previousTile,
-        choiceIndex: found.index,
-        chosenTile: gameState.choices[found.index],
-        reason: found.reason,
-      });
-      timerRef.current = setTimeout(() => {
-        engine.chooseTile(found.index);
-        setGameState(engine.getState());
-        setPhase("select-connection");
-      }, SELECT_TILE_DELAY);
-      return () => {
-        if (timerRef.current) clearTimeout(timerRef.current);
-      };
+    if (gameState.status !== "playing") {
+      setPhase("done");
+      return;
     }
-
-    if (phase === "select-connection") {
-      timerRef.current = setTimeout(() => {
-        if (!pending) return;
-        const result = engine.guessConnection(pending.reason);
-        const next = engine.getState();
-        setOutcome({ pointsAwarded: result.pointsAwarded, scoreAfter: next.score });
-        setGameState(next);
-        setPhase("explain");
-      }, SELECT_CONNECTION_DELAY);
-      return () => {
-        if (timerRef.current) clearTimeout(timerRef.current);
-      };
+    const previousTile = tileAt(gameState, gameState.step);
+    const found = findCorrectChoice(previousTile, gameState.choices);
+    if (!found) {
+      setPhase("done");
+      return;
     }
-    // `gameState === null` (not `gameState` itself) is intentional: it flips
-    // exactly once, when the tutorial engine first loads, to kick off step
-    // selection. Depending on `gameState` directly would also re-fire after
-    // every chooseTile()/guessConnection() call, and depending on `pending`
-    // would loop forever since setPending() is called from this same effect.
-  }, [phase, visible, gameState === null]);
+    setPending({
+      step: gameState.step,
+      previousTile,
+      choiceIndex: found.index,
+      chosenTile: gameState.choices[found.index],
+      reason: found.reason,
+    });
+  }, [phase, visible, gameState, pending]);
 
   const captionText = useMemo(() => {
     if (!pending) return "";
     if (phase === "select-tile") {
-      return `Choosing "${tileLabel(pending.chosenTile)}" - the only option that connects to "${tileLabel(pending.previousTile)}".`;
+      return `"${tileLabel(pending.chosenTile)}" is the only option that connects to "${tileLabel(pending.previousTile)}".`;
     }
     if (phase === "select-connection") {
-      return `Naming the connection: ${REASON_LABELS[pending.reason]}.`;
+      return `The connection is: ${REASON_LABELS[pending.reason]}.`;
     }
     return "";
   }, [phase, pending]);
+
+  function handleConfirmTile() {
+    if (!pending) return;
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.chooseTile(pending.choiceIndex);
+    setGameState(engine.getState());
+    setPhase("select-connection");
+  }
+
+  function handleConfirmConnection() {
+    if (!pending) return;
+    const engine = engineRef.current;
+    if (!engine) return;
+    const result = engine.guessConnection(pending.reason);
+    const next = engine.getState();
+    setOutcome({ pointsAwarded: result.pointsAwarded, scoreAfter: next.score });
+    setGameState(next);
+    setPhase("explain");
+  }
 
   function handleNext() {
     setPending(null);
@@ -280,6 +261,12 @@ export function TutorialModal({ visible, onFinish }: Props) {
                     })}
                   </View>
                 )}
+                <Pressable
+                  style={[styles.button, styles.confirmButton]}
+                  onPress={phase === "select-tile" ? handleConfirmTile : handleConfirmConnection}
+                >
+                  <Text style={styles.buttonText}>NEXT ▶</Text>
+                </Pressable>
               </>
             )}
 
@@ -465,6 +452,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",
+  },
+  confirmButton: {
+    marginTop: 16,
   },
   buttonText: {
     color: "#fff",
