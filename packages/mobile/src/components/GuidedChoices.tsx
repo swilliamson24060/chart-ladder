@@ -55,6 +55,8 @@ export function GuidedChoices({
                 style={[
                   styles.connectionChip,
                   {
+                    width: tileSize * 2,
+                    height: tileSize,
                     borderColor: CONNECTION_COLORS[reason],
                     backgroundColor: connectorDim[reason],
                   },
@@ -150,8 +152,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   connectionChip: {
-    width: 92,
-    height: 54,
     borderRadius: 8,
     borderWidth: 2,
     alignItems: "center",

@@ -279,6 +279,8 @@ export function TutorialModal({ visible, onFinish }: Props) {
                         style={[
                           styles.connectionChip,
                           {
+                            width: (cellSize - 4) * 2,
+                            height: cellSize - 4,
                             borderColor: REASON_COLORS[reason],
                             backgroundColor: connectorDim[reason],
                             opacity: isChosen ? 1 : 0.4,
@@ -446,8 +448,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   connectionChip: {
-    width: 92,
-    height: 54,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
