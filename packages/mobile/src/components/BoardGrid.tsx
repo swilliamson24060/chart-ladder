@@ -1,6 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Board, GRID_SIZE, type GuidedPathConnection } from "@chartcross/engine";
+import { BOARD_RENDER_COLS } from "../boardLayout";
 import { colors } from "../theme";
 import { TileChip } from "./TileChip";
 import { ConnectionLines } from "./ConnectionLines";
@@ -9,7 +10,6 @@ interface Props {
   board: Board;
   cellSize: number;
   highlightCells: Set<string>;
-  /** The cell currently awaiting player action - a connector guess or a rescue tile. */
   pendingActionCell?: { row: number; col: number } | null;
   onCellPress: (row: number, col: number) => void;
   pathConnections?: GuidedPathConnection[];
@@ -23,9 +23,10 @@ export function BoardGrid({
   onCellPress,
   pathConnections,
 }: Props) {
-  const size = cellSize * GRID_SIZE;
+  const width = cellSize * BOARD_RENDER_COLS;
+  const height = cellSize * GRID_SIZE;
   return (
-    <View style={[styles.board, { width: size, height: size }]}>
+    <View style={[styles.board, { width, height }]}>
       {board.map((row, rowIndex) => (
         <View key={rowIndex} style={styles.row}>
           {row.map((cell) => {
@@ -33,9 +34,8 @@ export function BoardGrid({
             const isPendingGap =
               pendingActionCell?.row === cell.row && pendingActionCell?.col === cell.col;
             return (
-              <Pressable
+              <View
                 key={cell.col}
-                onPress={() => onCellPress(cell.row, cell.col)}
                 style={[
                   styles.cell,
                   {
@@ -47,31 +47,45 @@ export function BoardGrid({
                         ? colors.decade
                         : colors.cellBorder,
                     borderWidth: isPendingGap ? 3 : isHighlighted ? 2 : 1,
-                    backgroundColor: isPendingGap
-                      ? `${colors.pendingGap}22`
-                      : colors.cellEmpty,
+                    backgroundColor: isPendingGap ? `${colors.pendingGap}22` : colors.cellEmpty,
                   },
                 ]}
-              >
-                {cell.tile ? (
-                  <TileChip tile={cell.tile} size={cellSize - 4} role={cell.role} />
-                ) : null}
-                {cell.role === "STARTER" && (
-                  <Text style={[styles.roleLabel, styles.roleLabelBelow, { color: colors.starter }]}>
-                    STARTER
-                  </Text>
-                )}
-                {cell.role === "END_ANCHOR" && (
-                  <Text style={[styles.roleLabel, styles.roleLabelAbove, { color: colors.endAnchor }]}>
-                    ANCHOR
-                  </Text>
-                )}
-              </Pressable>
+              />
             );
           })}
         </View>
       ))}
+
       <ConnectionLines board={board} cellSize={cellSize} pathConnections={pathConnections} />
+
+      {/* Wide tiles are rendered as a separate absolute layer, positioned by
+          their origin cell, so they can visually overflow into the next
+          cell (one square over) without disturbing the grid squares below
+          or the empty-cell layout above. */}
+      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+        {board.flatMap((row) => row).map((cell) => {
+          if (!cell.tile) return null;
+          return (
+            <Pressable
+              key={`tile-${cell.row}-${cell.col}`}
+              onPress={() => onCellPress(cell.row, cell.col)}
+              style={{ position: "absolute", left: cell.col * cellSize, top: cell.row * cellSize }}
+            >
+              <TileChip tile={cell.tile} size={cellSize - 4} role={cell.role} />
+              {cell.role === "STARTER" && (
+                <Text style={[styles.roleLabel, styles.roleLabelBelow, { color: colors.starter }]}>
+                  STARTER
+                </Text>
+              )}
+              {cell.role === "END_ANCHOR" && (
+                <Text style={[styles.roleLabel, styles.roleLabelAbove, { color: colors.endAnchor }]}>
+                  ANCHOR
+                </Text>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }

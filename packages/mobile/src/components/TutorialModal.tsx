@@ -3,7 +3,6 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import {
   bestConnectionReason,
   explainConnection,
-  GRID_SIZE,
   GUIDED_CONNECTION_BONUS,
   GUIDED_PATH_LENGTH,
   GUIDED_PATH_POSITIONS,
@@ -15,6 +14,7 @@ import {
   type GuidedGameState,
   type MatchableTile,
 } from "@chartcross/engine";
+import { BOARD_RENDER_COLS } from "../boardLayout";
 import { defaultCategory } from "../dataset";
 import { colors, connectorDim } from "../theme";
 import { BoardGrid } from "./BoardGrid";
@@ -106,7 +106,7 @@ export function TutorialModal({ visible, onFinish }: Props) {
 
   const cardWidth = Math.min(width - 40, 440);
   const boardPixelWidth = Math.min(cardWidth - 36, 300);
-  const cellSize = Math.floor(boardPixelWidth / GRID_SIZE);
+  const cellSize = Math.floor(boardPixelWidth / BOARD_RENDER_COLS);
 
   useEffect(() => {
     if (!visible) return;
@@ -195,7 +195,7 @@ export function TutorialModal({ visible, onFinish }: Props) {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={[styles.boardWrap, { width: cellSize * GRID_SIZE }]}>
+            <View style={[styles.boardWrap, { width: cellSize * BOARD_RENDER_COLS }]}>
               <BoardGrid
                 board={gameState.board}
                 cellSize={cellSize}
@@ -425,6 +425,7 @@ const styles = StyleSheet.create({
   },
   choiceRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "center",
     gap: 14,
     marginTop: 8,

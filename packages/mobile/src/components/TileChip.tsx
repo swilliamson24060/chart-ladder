@@ -46,7 +46,7 @@ export function TileChip({ tile, size, role, selected, dimmed, showValue, onPres
       style={[
         styles.chip,
         {
-          width: size,
+          width: size * 2,
           height: size,
           borderColor: accent,
           backgroundColor,

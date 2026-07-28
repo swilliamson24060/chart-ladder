@@ -115,6 +115,7 @@ const styles = StyleSheet.create({
   },
   choiceRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "center",
     gap: 14,
   },

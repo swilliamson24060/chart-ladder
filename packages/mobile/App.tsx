@@ -17,6 +17,7 @@ import {
   GuidedGameEngine,
   type GuidedSessionProgress,
 } from "@chartcross/engine";
+import { BOARD_RENDER_COLS } from "./src/boardLayout";
 import {
   defaultCategory,
   GAME_CATEGORIES,
@@ -79,8 +80,19 @@ export default function App() {
     chromeHeight + CHOICES_RESERVED_HEIGHT + TOAST_MIN_HEIGHT + BOARD_GAP + CONTENT_VERTICAL_PADDING;
   const availableBoardWidth = Math.max(0, width - 24);
   const availableBoardHeight = Math.max(0, height - reservedHeight);
-  const boardPixelWidth = Math.min(availableBoardWidth, availableBoardHeight, MAX_BOARD_WIDTH);
-  const cellSize = Math.max(MIN_CELL_SIZE, Math.floor(boardPixelWidth / GRID_SIZE));
+  // Tiles are twice as wide as they are tall, so the board's pixel budget is
+  // spent across BOARD_RENDER_COLS (one wider than GRID_SIZE) horizontally
+  // but only GRID_SIZE vertically.
+  const cellSize = Math.max(
+    MIN_CELL_SIZE,
+    Math.floor(
+      Math.min(
+        availableBoardWidth / BOARD_RENDER_COLS,
+        availableBoardHeight / GRID_SIZE,
+        MAX_BOARD_WIDTH / BOARD_RENDER_COLS,
+      ),
+    ),
+  );
 
   function refresh() {
     setGameState(engineRef.current.getState());
@@ -274,7 +286,7 @@ export default function App() {
       </View>
 
       <View style={styles.mainContent}>
-        <View style={[styles.boardWrap, { width: cellSize * GRID_SIZE }]}>
+        <View style={[styles.boardWrap, { width: cellSize * BOARD_RENDER_COLS }]}>
           <BoardGrid
             board={gameState.board}
             cellSize={cellSize}
