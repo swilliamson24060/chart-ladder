@@ -14,6 +14,8 @@ interface Props {
   step: number;
   awaitingConnectionGuess: boolean;
   hintReason: ConnectionCategory | null;
+  /** Matches the size of tiles placed on the board (BoardGrid uses cellSize - 4). */
+  tileSize: number;
   onChooseTile: (index: number) => void;
   onGuessConnection: (reason: ConnectionCategory) => void;
 }
@@ -35,6 +37,7 @@ export function GuidedChoices({
   step,
   awaitingConnectionGuess,
   hintReason,
+  tileSize,
   onChooseTile,
   onGuessConnection,
 }: Props) {
@@ -79,7 +82,7 @@ export function GuidedChoices({
           <View style={styles.choiceRow}>
             {choices.map((tile, index) => (
               <View key={`${tile.kind}-${tile.id}`} style={styles.choice}>
-                <TileChip tile={tile} size={82} fontScale={0.17} showValue onPress={() => onChooseTile(index)} />
+                <TileChip tile={tile} size={tileSize} fontScale={0.17} showValue onPress={() => onChooseTile(index)} />
                 <Text style={styles.kind}>{tile.kind}</Text>
               </View>
             ))}

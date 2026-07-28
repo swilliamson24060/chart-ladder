@@ -242,7 +242,7 @@ export function TutorialModal({ visible, onFinish }: Props) {
                     <View key={`${tile.kind}-${tile.id}`} style={styles.choice}>
                       <TileChip
                         tile={tile}
-                        size={78}
+                        size={cellSize - 4}
                         fontScale={0.17}
                         showValue
                         selected={index === pending.choiceIndex}

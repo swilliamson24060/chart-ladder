@@ -306,6 +306,7 @@ export default function App() {
             step={gameState.step}
             awaitingConnectionGuess={gameState.awaitingConnectionGuess}
             hintReason={gameState.hintReason}
+            tileSize={cellSize - 4}
             onChooseTile={handleChooseTile}
             onGuessConnection={handleGuessConnection}
           />
