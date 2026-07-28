@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import {
   bestConnectionReason,
@@ -29,7 +29,7 @@ interface Props {
 // easier to design a coherent explanation around than a fresh random one.
 const TUTORIAL_SEED = 20260101;
 
-type Phase = "select-tile" | "select-connection" | "explain" | "done";
+type Phase = "intro" | "select-tile" | "select-connection" | "explain" | "done";
 
 interface PendingStep {
   step: number;
@@ -100,7 +100,7 @@ export function TutorialModal({ visible, onFinish }: Props) {
   const { width } = useWindowDimensions();
   const engineRef = useRef<GuidedGameEngine | null>(null);
   const [gameState, setGameState] = useState<GuidedGameState | null>(null);
-  const [phase, setPhase] = useState<Phase>("select-tile");
+  const [phase, setPhase] = useState<Phase>("intro");
   const [pending, setPending] = useState<PendingStep | null>(null);
   const [outcome, setOutcome] = useState<StepOutcome | null>(null);
 
@@ -114,7 +114,7 @@ export function TutorialModal({ visible, onFinish }: Props) {
     setGameState(engineRef.current.getState());
     setPending(null);
     setOutcome(null);
-    setPhase("select-tile");
+    setPhase("intro");
   }, [visible]);
 
   // Every phase transition here is player-paced (a Next tap), never a timer -
@@ -143,16 +143,9 @@ export function TutorialModal({ visible, onFinish }: Props) {
     });
   }, [phase, visible, gameState, pending]);
 
-  const captionText = useMemo(() => {
-    if (!pending) return "";
-    if (phase === "select-tile") {
-      return `"${tileLabel(pending.chosenTile)}" is the only option that connects to "${tileLabel(pending.previousTile)}".`;
-    }
-    if (phase === "select-connection") {
-      return `The connection is: ${REASON_LABELS[pending.reason]}.`;
-    }
-    return "";
-  }, [phase, pending]);
+  function handleStartFromIntro() {
+    setPhase("select-tile");
+  }
 
   function handleConfirmTile() {
     if (!pending) return;
@@ -183,9 +176,10 @@ export function TutorialModal({ visible, onFinish }: Props) {
   if (!visible || !gameState) return null;
 
   const anchorEdge = gameState.completedConnections[GUIDED_PATH_LENGTH];
-  const starterTile = pending?.step === 0 ? tileAt(gameState, 0) : null;
-  const anchorTile =
-    pending?.step === GUIDED_PATH_LENGTH - 1 ? tileAt(gameState, GUIDED_PATH_POSITIONS.length - 1) : null;
+  const pathStarterTile = tileAt(gameState, 0);
+  const pathAnchorTile = tileAt(gameState, GUIDED_PATH_POSITIONS.length - 1);
+  const starterTile = pending?.step === 0 ? pathStarterTile : null;
+  const anchorTile = pending?.step === GUIDED_PATH_LENGTH - 1 ? pathAnchorTile : null;
 
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onFinish}>
@@ -211,63 +205,96 @@ export function TutorialModal({ visible, onFinish }: Props) {
               />
             </View>
 
-            {phase !== "done" && (
-              <View style={styles.captionSlot}>
-                {phase !== "explain" && !!captionText && <Text style={styles.caption}>{captionText}</Text>}
+            {phase === "intro" && (
+              <View style={styles.explainCard}>
+                <Text style={styles.explainTitle}>STARTER &amp; ANCHOR</Text>
+                <Text style={styles.explainLine}>
+                  Every path starts at a pink STARTER artist and ends at a blue ANCHOR artist - both are
+                  already placed on the board for you: "{tileLabel(pathStarterTile)}" and "
+                  {tileLabel(pathAnchorTile)}" this time.
+                </Text>
+                <Text style={styles.explainLine}>
+                  Your job is to find the 5 tiles in between that connect STARTER all the way to ANCHOR,
+                  one correct choice at a time.
+                </Text>
+                <Pressable style={styles.button} onPress={handleStartFromIntro}>
+                  <Text style={styles.buttonText}>NEXT ▶</Text>
+                </Pressable>
               </View>
             )}
 
-            {phase !== "explain" && phase !== "done" && pending && (
-              <>
-                {phase === "select-tile" && (
-                  <View style={styles.choiceRow}>
-                    {gameState.choices.map((tile, index) => (
-                      <View key={`${tile.kind}-${tile.id}`} style={styles.choice}>
-                        <TileChip
-                          tile={tile}
-                          size={78}
-                          fontScale={0.17}
-                          showValue
-                          selected={index === pending.choiceIndex}
-                          dimmed={index !== pending.choiceIndex}
-                        />
-                        <Text style={styles.kind}>{tile.kind}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-                {phase === "select-connection" && (
-                  <View style={styles.connectionRow}>
-                    {CONNECTION_ORDER.map((reason) => {
-                      const isChosen = reason === pending.reason;
-                      return (
-                        <View
-                          key={reason}
-                          style={[
-                            styles.connectionChip,
-                            {
-                              borderColor: REASON_COLORS[reason],
-                              backgroundColor: connectorDim[reason],
-                              opacity: isChosen ? 1 : 0.4,
-                              borderWidth: isChosen ? 3 : 2,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.connectionText, { color: REASON_COLORS[reason] }]}>
-                            {REASON_LABELS[reason]}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-                <Pressable
-                  style={[styles.button, styles.confirmButton]}
-                  onPress={phase === "select-tile" ? handleConfirmTile : handleConfirmConnection}
-                >
+            {phase === "select-tile" && pending && (
+              <View style={styles.explainCard}>
+                <Text style={styles.explainTitle}>PICK THE NEXT TILE</Text>
+                <Text style={styles.explainLine}>
+                  Each step gives you three artists or songs. Only one of them connects to the last tile
+                  placed on the path - by sharing a chart year, a performer, or an artist collaboration.
+                  The other two are decoys that don't connect at all.
+                </Text>
+                <Text style={styles.explainLine}>
+                  Here, "{tileLabel(pending.chosenTile)}" (highlighted below) is the right pick because
+                  it connects to "{tileLabel(pending.previousTile)}", the last tile on the path.
+                </Text>
+                <View style={styles.choiceRow}>
+                  {gameState.choices.map((tile, index) => (
+                    <View key={`${tile.kind}-${tile.id}`} style={styles.choice}>
+                      <TileChip
+                        tile={tile}
+                        size={78}
+                        fontScale={0.17}
+                        showValue
+                        selected={index === pending.choiceIndex}
+                        dimmed={index !== pending.choiceIndex}
+                      />
+                      <Text style={styles.kind}>{tile.kind}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Pressable style={[styles.button, styles.confirmButton]} onPress={handleConfirmTile}>
                   <Text style={styles.buttonText}>NEXT ▶</Text>
                 </Pressable>
-              </>
+              </View>
+            )}
+
+            {phase === "select-connection" && pending && (
+              <View style={styles.explainCard}>
+                <Text style={styles.explainTitle}>NAME THE CONNECTION</Text>
+                <Text style={styles.explainLine}>
+                  Once the right tile is placed, you can earn a bonus by naming how it connects: COLLAB
+                  (the two artists worked together), ARTIST (the same performer is on both), or SAME YEAR
+                  (they both charted in the same year).
+                </Text>
+                <Text style={styles.explainLine}>
+                  Here, the connection is {REASON_LABELS[pending.reason]} (highlighted below). Guessing
+                  right adds bonus points; guessing wrong just reveals the answer and skips the bonus.
+                </Text>
+                <View style={styles.connectionRow}>
+                  {CONNECTION_ORDER.map((reason) => {
+                    const isChosen = reason === pending.reason;
+                    return (
+                      <View
+                        key={reason}
+                        style={[
+                          styles.connectionChip,
+                          {
+                            borderColor: REASON_COLORS[reason],
+                            backgroundColor: connectorDim[reason],
+                            opacity: isChosen ? 1 : 0.4,
+                            borderWidth: isChosen ? 3 : 2,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.connectionText, { color: REASON_COLORS[reason] }]}>
+                          {REASON_LABELS[reason]}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+                <Pressable style={[styles.button, styles.confirmButton]} onPress={handleConfirmConnection}>
+                  <Text style={styles.buttonText}>NEXT ▶</Text>
+                </Pressable>
+              </View>
             )}
 
             {phase === "explain" && pending && outcome && (
@@ -372,21 +399,11 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginBottom: 8,
   },
-  captionSlot: {
-    minHeight: 32,
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  caption: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: "center",
-  },
   choiceRow: {
     flexDirection: "row",
     justifyContent: "center",
     gap: 14,
+    marginTop: 8,
   },
   choice: {
     alignItems: "center",
@@ -401,6 +418,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     gap: 10,
+    marginTop: 8,
   },
   connectionChip: {
     width: 92,
