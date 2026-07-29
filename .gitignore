@@ -18,3 +18,8 @@ android/
 # Local assistant tooling config (machine-specific, not project source)
 .claude/
 
+# Regeneratable data pipeline outputs (rerun scripts/wikidata_enrich.py and
+# scripts/connections_generator.py to reproduce; only the shipped .gz is tracked)
+data/enriched_hot100.csv
+data/connections.json
+
