@@ -199,6 +199,10 @@ export function TutorialModal({ visible, onFinish }: Props) {
                   Your job is to find the 5 songs in between that connect STARTER all the way to ANCHOR,
                   one correct choice at a time.
                 </Text>
+                <Text style={styles.explainLine}>
+                  💡 Tip: you can tap any song already placed on the board - like STARTER or ANCHOR - to
+                  see its full details.
+                </Text>
                 <Pressable style={styles.button} onPress={handleStartFromIntro}>
                   <Text style={styles.buttonText}>NEXT ▶</Text>
                 </Pressable>
@@ -229,7 +233,6 @@ export function TutorialModal({ visible, onFinish }: Props) {
                         selected={index === pending.choiceIndex}
                         dimmed={index !== pending.choiceIndex}
                       />
-                      <Text style={styles.kind}>{tile.performer}</Text>
                     </View>
                   ))}
                 </View>
@@ -393,12 +396,6 @@ const styles = StyleSheet.create({
   },
   choice: {
     alignItems: "center",
-  },
-  kind: {
-    color: colors.textSecondary,
-    fontSize: 9,
-    fontWeight: "700",
-    marginTop: 4,
   },
   connectionRow: {
     flexDirection: "row",

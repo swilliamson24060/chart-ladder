@@ -71,7 +71,6 @@ export function GuidedChoices({
             {choices.map((tile, index) => (
               <View key={tile.id} style={styles.choice}>
                 <TileChip tile={tile} size={tileSize} fontScale={0.17} onPress={() => onChooseTile(index)} />
-                <Text style={styles.kind}>{tile.performer}</Text>
               </View>
             ))}
           </View>
@@ -113,12 +112,6 @@ const styles = StyleSheet.create({
   },
   choice: {
     alignItems: "center",
-  },
-  kind: {
-    color: colors.textSecondary,
-    fontSize: 9,
-    fontWeight: "700",
-    marginTop: 4,
   },
   hint: {
     borderWidth: 1,

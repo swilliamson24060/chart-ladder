@@ -78,7 +78,8 @@ export function HowToPlayModal({ visible, onClose, onWatchTutorial }: Props) {
               <Section title="BUILD THE PATH">
                 <Text style={styles.body}>
                   Connect the START song to the ANCHOR song by finding all {GUIDED_PATH_LENGTH} songs
-                  in the prepared chain. Correct songs are placed on the board automatically.
+                  in the prepared chain. Correct songs are placed on the board automatically. Tap any
+                  song already on the board any time to see its full details.
                 </Text>
               </Section>
 

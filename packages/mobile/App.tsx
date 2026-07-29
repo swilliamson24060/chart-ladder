@@ -298,7 +298,11 @@ export default function App() {
         </View>
 
         <View style={styles.toastSlot}>
-          {toast && <Text style={[styles.toast, toast.error && styles.toastError]}>{toast.text}</Text>}
+          {toast ? (
+            <Text style={[styles.toast, toast.error && styles.toastError]}>{toast.text}</Text>
+          ) : (
+            <Text style={styles.boardHint}>💡 Tap a placed tile to see its details</Text>
+          )}
         </View>
 
         {gameState.status === "playing" && (
@@ -481,5 +485,11 @@ const styles = StyleSheet.create({
   },
   toastError: {
     color: colors.illegal,
+  },
+  boardHint: {
+    color: colors.textSecondary,
+    fontWeight: "600",
+    fontSize: 11,
+    textAlign: "center",
   },
 });
