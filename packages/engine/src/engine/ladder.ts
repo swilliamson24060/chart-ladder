@@ -86,6 +86,14 @@ export const LADDER_TILE_KEYS: LadderTileKey[] = [
   "same_award",
 ];
 
+/**
+ * Tile keys capped to at most one use per round (chain of 5 steps + the
+ * automatic anchor link). same_genre groups are large and common enough
+ * that leaving it fully random made it show up noticeably more often than
+ * the other connection types felt like it should.
+ */
+const REPEAT_CAPPED_TILE_KEYS: ReadonlySet<LadderTileKey> = new Set(["same_genre"]);
+
 export const LADDER_TILE_LABELS: Record<LadderTileKey, string> = {
   same_artist: "SAME ARTIST",
   band_collab: "BAND / COLLAB",
@@ -278,6 +286,16 @@ interface LadderRoute {
   anchorReason: LadderTileKey;
 }
 
+/** Prefers a tile key that hasn't already been used once this round, falling back to any available key if that would leave no options. */
+function pickTileKeyPreferringUncapped(
+  available: LadderTileKey[],
+  rng: () => number,
+  usedOnceKeys: ReadonlySet<LadderTileKey>,
+): LadderTileKey {
+  const preferred = available.filter((key) => !usedOnceKeys.has(key));
+  return pickRandom(rng, preferred.length > 0 ? preferred : available);
+}
+
 function buildLadderRoute(dataset: LadderDataset, categoryId: LadderCategoryId, rng: () => number): LadderRoute {
   const index = ladderIndex(dataset);
   const category = categoryById(categoryId);
@@ -293,6 +311,7 @@ function buildLadderRoute(dataset: LadderDataset, categoryId: LadderCategoryId, 
     const usedIds = new Set<number>([starter.id]);
     const tiles: LadderSong[] = [];
     const reasons: LadderTileKey[] = [];
+    const usedOnceKeys = new Set<LadderTileKey>();
     let current = starter;
     let failed = false;
 
@@ -302,7 +321,8 @@ function buildLadderRoute(dataset: LadderDataset, categoryId: LadderCategoryId, 
         failed = true;
         break;
       }
-      const tileKey = pickRandom(rng, available);
+      const tileKey = pickTileKeyPreferringUncapped(available, rng, usedOnceKeys);
+      if (REPEAT_CAPPED_TILE_KEYS.has(tileKey)) usedOnceKeys.add(tileKey);
       const neighborIds = eligibleNeighborIds(current.id, tileKey, dataset, index, category, usedIds);
       const next = dataset.songs[pickRandom(rng, neighborIds)];
       tiles.push(next);
@@ -314,7 +334,7 @@ function buildLadderRoute(dataset: LadderDataset, categoryId: LadderCategoryId, 
 
     const anchorAvailable = availableTileKeys(current.id, dataset, index, category, usedIds);
     if (anchorAvailable.length === 0) continue;
-    const anchorTileKey = pickRandom(rng, anchorAvailable);
+    const anchorTileKey = pickTileKeyPreferringUncapped(anchorAvailable, rng, usedOnceKeys);
     const anchorNeighbors = eligibleNeighborIds(current.id, anchorTileKey, dataset, index, category, usedIds);
     const anchor = dataset.songs[pickRandom(rng, anchorNeighbors)];
 
