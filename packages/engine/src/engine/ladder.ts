@@ -87,12 +87,20 @@ export const LADDER_TILE_KEYS: LadderTileKey[] = [
 ];
 
 /**
- * Tile keys capped to at most one use per round (chain of 5 steps + the
- * automatic anchor link). same_genre groups are large and common enough
- * that leaving it fully random made it show up noticeably more often than
- * the other connection types felt like it should.
+ * These three tile keys have large, common groups that would otherwise
+ * dominate a round if left fully random. Rather than a hard "once per
+ * round" cap, each round rolls a per-key usage limit - 1 time (55%
+ * chance), 2 times (30%), or 3 times (15%) - across the whole chain (the 5
+ * guided steps plus the automatic anchor link).
  */
-const REPEAT_CAPPED_TILE_KEYS: ReadonlySet<LadderTileKey> = new Set(["same_genre"]);
+const DISTRIBUTION_CONTROLLED_KEYS: readonly LadderTileKey[] = ["same_artist", "same_peak_pos", "same_genre"];
+
+function rollUsageCap(rng: () => number): number {
+  const roll = rng();
+  if (roll < 0.55) return 1;
+  if (roll < 0.85) return 2;
+  return 3;
+}
 
 export const LADDER_TILE_LABELS: Record<LadderTileKey, string> = {
   same_artist: "SAME ARTIST",
@@ -286,14 +294,20 @@ interface LadderRoute {
   anchorReason: LadderTileKey;
 }
 
-/** Prefers a tile key that hasn't already been used once this round, falling back to any available key if that would leave no options. */
-function pickTileKeyPreferringUncapped(
+/** Prefers a tile key that hasn't hit its rolled usage cap yet, falling back to any available key if that would leave no options. */
+function pickTileKeyRespectingCaps(
   available: LadderTileKey[],
   rng: () => number,
-  usedOnceKeys: ReadonlySet<LadderTileKey>,
+  usageCaps: ReadonlyMap<LadderTileKey, number>,
+  usageCounts: Map<LadderTileKey, number>,
 ): LadderTileKey {
-  const preferred = available.filter((key) => !usedOnceKeys.has(key));
-  return pickRandom(rng, preferred.length > 0 ? preferred : available);
+  const withinCap = available.filter((key) => {
+    const cap = usageCaps.get(key);
+    return cap === undefined || (usageCounts.get(key) ?? 0) < cap;
+  });
+  const tileKey = pickRandom(rng, withinCap.length > 0 ? withinCap : available);
+  usageCounts.set(tileKey, (usageCounts.get(tileKey) ?? 0) + 1);
+  return tileKey;
 }
 
 function buildLadderRoute(dataset: LadderDataset, categoryId: LadderCategoryId, rng: () => number): LadderRoute {
@@ -311,7 +325,10 @@ function buildLadderRoute(dataset: LadderDataset, categoryId: LadderCategoryId, 
     const usedIds = new Set<number>([starter.id]);
     const tiles: LadderSong[] = [];
     const reasons: LadderTileKey[] = [];
-    const usedOnceKeys = new Set<LadderTileKey>();
+    const usageCaps = new Map<LadderTileKey, number>(
+      DISTRIBUTION_CONTROLLED_KEYS.map((key) => [key, rollUsageCap(rng)]),
+    );
+    const usageCounts = new Map<LadderTileKey, number>();
     let current = starter;
     let failed = false;
 
@@ -321,8 +338,7 @@ function buildLadderRoute(dataset: LadderDataset, categoryId: LadderCategoryId, 
         failed = true;
         break;
       }
-      const tileKey = pickTileKeyPreferringUncapped(available, rng, usedOnceKeys);
-      if (REPEAT_CAPPED_TILE_KEYS.has(tileKey)) usedOnceKeys.add(tileKey);
+      const tileKey = pickTileKeyRespectingCaps(available, rng, usageCaps, usageCounts);
       const neighborIds = eligibleNeighborIds(current.id, tileKey, dataset, index, category, usedIds);
       const next = dataset.songs[pickRandom(rng, neighborIds)];
       tiles.push(next);
@@ -334,7 +350,7 @@ function buildLadderRoute(dataset: LadderDataset, categoryId: LadderCategoryId, 
 
     const anchorAvailable = availableTileKeys(current.id, dataset, index, category, usedIds);
     if (anchorAvailable.length === 0) continue;
-    const anchorTileKey = pickTileKeyPreferringUncapped(anchorAvailable, rng, usedOnceKeys);
+    const anchorTileKey = pickTileKeyRespectingCaps(anchorAvailable, rng, usageCaps, usageCounts);
     const anchorNeighbors = eligibleNeighborIds(current.id, anchorTileKey, dataset, index, category, usedIds);
     const anchor = dataset.songs[pickRandom(rng, anchorNeighbors)];
 
@@ -364,8 +380,22 @@ function shuffled<T>(rng: () => number, items: T[]): T[] {
 }
 
 /** 1 correct + up to 2 random decoys from the other tile keys, shuffled. */
-function pickConnectionChoices(rng: () => number, correct: LadderTileKey): LadderTileKey[] {
-  const decoyPool = LADDER_TILE_KEYS.filter((key) => key !== correct);
+/**
+ * 1 correct + up to 2 random decoys. same_artist is excluded from the
+ * decoy pool for One Hit Wonders specifically - it can never be the
+ * correct answer there (each performer has exactly one song, so there's
+ * never a second song to share an artist with), so offering it as a decoy
+ * would just be a free giveaway that it's wrong.
+ */
+function pickConnectionChoices(
+  rng: () => number,
+  correct: LadderTileKey,
+  categoryId: LadderCategoryId,
+): LadderTileKey[] {
+  let decoyPool = LADDER_TILE_KEYS.filter((key) => key !== correct);
+  if (categoryId === "one-hit-wonders") {
+    decoyPool = decoyPool.filter((key) => key !== "same_artist");
+  }
   const decoys = shuffled(rng, decoyPool).slice(0, 2);
   return shuffled(rng, [correct, ...decoys]);
 }
@@ -631,7 +661,7 @@ export class GuidedGameEngine {
     }
 
     this.awaitingConnectionGuess = true;
-    this.connectionChoices = pickConnectionChoices(this.rng, this.route.reasons[this.step]);
+    this.connectionChoices = pickConnectionChoices(this.rng, this.route.reasons[this.step], this.categoryId);
     return {
       correct: !missed,
       missed,
