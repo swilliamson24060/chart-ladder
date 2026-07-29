@@ -27,6 +27,8 @@ jobs:
 
       - run: npm ci
 
+      - run: node scripts/decompress-connections.mjs
+
       - run: npx expo export --platform web
         working-directory: packages/mobile
 

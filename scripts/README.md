@@ -1,6 +1,15 @@
 # Chart Ladder game data pipeline
 
-Two scripts, run in order:
+Only `data/connections.json.gz` is committed (the plain `.json` is regenerated
+by `decompress-connections.mjs`, which runs automatically via the root
+package's `postinstall` script - see also the "Deploy web build to GitHub
+Pages" workflow, which runs it explicitly before `expo export`). The mobile
+app imports the plain `.json` directly; if you ever see a "None of these
+files exist ... data/connections.json" bundler error, run
+`node scripts/decompress-connections.mjs` from the repo root.
+
+Two scripts, run in order to regenerate connections.json.gz itself (e.g.
+after adding new source chart data):
 
 ## 1. `wikidata_enrich.py` (run this locally -- needs real internet access)
 
