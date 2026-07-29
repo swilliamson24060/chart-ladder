@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { loadLocalDataset } from "../loadLocalDataset";
 import {
   createEmptyBoard,
@@ -15,13 +16,17 @@ import { buildDataIndex, findArtistCandidatesFor, findCollabCandidatesFor } from
 import { decadePoints, tileValue } from "../tileValue";
 import { getAllConnections } from "../connections";
 import {
+  buildLadderDataset,
   GUIDED_CONNECTION_BONUS,
   GUIDED_PATH_LENGTH,
   GUIDED_PATH_POSITIONS,
   GUIDED_TILE_POINTS,
   GuidedGameEngine,
-  isSelfReferentialGuidedConnection,
-} from "../guidedGame";
+  LADDER_CATEGORIES,
+  LADDER_TILE_KEYS,
+  ladderConnectionReason,
+  type LadderRawData,
+} from "../ladder";
 import {
   ArtistTile,
   SongTile,
@@ -33,6 +38,7 @@ import {
   MultiplierType,
   WildcardTile,
   WILD_TILE_COST,
+  type LadderSongTile,
 } from "../types";
 
 let failures = 0;
@@ -120,6 +126,12 @@ function resolveMove(
 
 const dataset = loadLocalDataset();
 console.log(`Loaded ${dataset.songs.length} songs, ${dataset.artists.length} artists.\n`);
+
+const rawConnections: LadderRawData = JSON.parse(
+  readFileSync(new URL("../../../../../data/connections.json", import.meta.url), "utf8"),
+);
+const ladderDataset = buildLadderDataset(rawConnections);
+console.log(`Loaded ${ladderDataset.songs.length} ladder songs.\n`);
 
 console.log("Mockup scenario checks:");
 {
@@ -1070,53 +1082,44 @@ console.log("\nMultiplier applied/missed reporting checks:");
   check("Observed at least one missed-bonus placement across the seed sweep", sawMissed);
 }
 
-console.log("\nGuided five-tile path checks:");
+console.log("\nGuided ladder path checks:");
+const topTier = LADDER_CATEGORIES.find((c) => c.id === "top-tier")!;
 {
-  const engine = new GuidedGameEngine(dataset, 20260723);
+  const engine = new GuidedGameEngine(ladderDataset, "top-tier", 20260723);
   let state = engine.getState();
-  check("Guided board starts without multiplier cells", state.board.flat().every((cell) => !cell.multiplier));
-  check("Guided turn offers exactly three choices", state.choices.length === 3);
+  check("Ladder turn offers exactly three tile choices", state.choices.length === 3);
 
   for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
     state = engine.getState();
     const previousPosition = GUIDED_PATH_POSITIONS[step];
-    const previous = state.board[previousPosition.row][previousPosition.col].tile as ArtistTile | SongTile;
-    const correctIndex = state.choices.findIndex(
-      (choice) => bestConnectionReason(previous, choice) !== null,
-    );
-    const validChoices = state.choices.filter(
-      (choice) => bestConnectionReason(previous, choice) !== null,
-    );
+    const previous = state.board[previousPosition.row][previousPosition.col].tile as LadderSongTile;
+    const reasons = state.choices.map((choice) => ladderConnectionReason(previous, choice, ladderDataset));
+    const correctIndex = reasons.findIndex((r) => r !== null);
+    const validChoices = reasons.filter((r) => r !== null);
     check(`Step ${step + 1} has exactly one connecting choice`, validChoices.length === 1);
-    check(
-      `Step ${step + 1} correct choice is not self-referential`,
-      !isSelfReferentialGuidedConnection(previous, state.choices[correctIndex]),
-    );
 
     if (step === 0) {
       const hint = engine.useHint();
-      check("Hint reveals the connection type", hint === bestConnectionReason(previous, state.choices[correctIndex]));
-      const expected =
-        GUIDED_TILE_POINTS + tileValue(state.choices[correctIndex]) + tileValue(previous);
+      check("Hint reveals a valid connection type", hint !== null && hint === engine.peekCurrentReason());
       const result = engine.chooseTile(correctIndex);
-      check("First tile includes its value and the starter value", result.pointsAwarded === expected);
+      check("First tile awards flat base points only (hint forfeits the bonus)", result.pointsAwarded === GUIDED_TILE_POINTS);
     } else {
-      const choice = state.choices[correctIndex];
-      const correctReason = bestConnectionReason(previous, choice) as ConnectionCategory;
       const choiceResult = engine.chooseTile(correctIndex);
       check(`Step ${step + 1} waits for a connection guess`, choiceResult.needsConnectionGuess);
+      // A song pair can connect through more than one tile type at once, so
+      // ask the engine which one the route actually committed to rather
+      // than re-deriving it independently (which could legitimately
+      // disagree while still being "a" valid connection).
+      const correctReason = engine.peekCurrentReason()!;
+      const afterChoice = engine.getState();
+      check(
+        `Step ${step + 1} offers three connection choices including the correct one`,
+        afterChoice.connectionChoices.length === 3 && afterChoice.connectionChoices.includes(correctReason),
+      );
       const guessedReason =
-        step === 1
-          ? CONNECTION_CATEGORIES.find((reason) => reason !== correctReason)!
-          : correctReason;
+        step === 1 ? LADDER_TILE_KEYS.find((reason) => reason !== correctReason)! : correctReason;
       const guessResult = engine.guessConnection(guessedReason);
-      const anchorPosition = GUIDED_PATH_POSITIONS[GUIDED_PATH_POSITIONS.length - 1];
-      const anchor = state.board[anchorPosition.row][anchorPosition.col].tile!;
-      const expected =
-        GUIDED_TILE_POINTS +
-        tileValue(choice) +
-        (step === GUIDED_PATH_LENGTH - 1 ? tileValue(anchor) : 0) +
-        (step === 1 ? 0 : GUIDED_CONNECTION_BONUS);
+      const expected = GUIDED_TILE_POINTS + (step === 1 ? 0 : GUIDED_CONNECTION_BONUS);
       check(`Step ${step + 1} awards the expected score`, guessResult.pointsAwarded === expected);
       if (step === 1) {
         check("Wrong connection guess reveals the correct reason", guessResult.correctReason === correctReason);
@@ -1127,17 +1130,17 @@ console.log("\nGuided five-tile path checks:");
 
   state = engine.getState();
   check("Five correct tiles complete the guided path", state.status === "path-complete");
-  check("All five intermediate board rows contain their prepared tiles",
-    GUIDED_PATH_POSITIONS.slice(1, -1).every((position) => !!state.board[position.row][position.col].tile));
+  check(
+    "All five intermediate board rows contain their prepared tiles",
+    GUIDED_PATH_POSITIONS.slice(1, -1).every((position) => !!state.board[position.row][position.col].tile),
+  );
   check("Completed route draws six connections including the anchor edge", state.completedConnections.length === 6);
   check(
-    "Every completed path edge joins distinct performer identities",
-    GUIDED_PATH_POSITIONS.slice(0, -1).every((position, index) => {
-      const next = GUIDED_PATH_POSITIONS[index + 1];
-      return !isSelfReferentialGuidedConnection(
-        state.board[position.row][position.col].tile as ArtistTile | SongTile,
-        state.board[next.row][next.col].tile as ArtistTile | SongTile,
-      );
+    "Every song on the completed path is eligible for its category",
+    GUIDED_PATH_POSITIONS.every((position) => {
+      const tile = state.board[position.row][position.col].tile as LadderSongTile;
+      const song = ladderDataset.songs[Number(tile.id)];
+      return topTier.isEligible(song, { performerSongCounts: new Map() });
     }),
   );
   const completedScore = state.score;
@@ -1149,25 +1152,49 @@ console.log("\nGuided five-tile path checks:");
 }
 
 {
-  const engine = new GuidedGameEngine(dataset, 20260724);
+  const engine = new GuidedGameEngine(ladderDataset, "top-tier", 20260724);
   for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
     const state = engine.getState();
     const previousPosition = GUIDED_PATH_POSITIONS[step];
-    const previous = state.board[previousPosition.row][previousPosition.col].tile!;
-    const wrongIndex = state.choices.findIndex((choice) => bestConnectionReason(previous, choice) === null);
+    const previous = state.board[previousPosition.row][previousPosition.col].tile as LadderSongTile;
+    const wrongIndex = state.choices.findIndex(
+      (choice) => ladderConnectionReason(previous, choice, ladderDataset) === null,
+    );
     const result = engine.chooseTile(wrongIndex);
-    check(`Miss ${step + 1} places the correct tile for the player`, !!engine.getState().board[GUIDED_PATH_POSITIONS[step + 1].row][GUIDED_PATH_POSITIONS[step + 1].col].tile);
+    check(
+      `Miss ${step + 1} places the correct tile for the player`,
+      !!engine.getState().board[GUIDED_PATH_POSITIONS[step + 1].row][GUIDED_PATH_POSITIONS[step + 1].col].tile,
+    );
     check(`Miss ${step + 1} awards no base points`, result.pointsAwarded === 0);
     if (step < GUIDED_PATH_LENGTH - 1) {
       check(`Miss ${step + 1} still offers the connection bonus`, result.needsConnectionGuess);
-      const correctTile = result.correctTile;
-      const correctReason = bestConnectionReason(previous, correctTile) as ConnectionCategory;
+      const correctReason = engine.peekCurrentReason()!;
       const bonus = engine.guessConnection(correctReason);
       check(`Miss ${step + 1} can still earn the 10-point bonus`, bonus.pointsAwarded === GUIDED_CONNECTION_BONUS);
     }
   }
-  check("The fifth artist/song miss ends the guided session", engine.getState().status === "game-over");
+  check("The fifth song miss ends the guided session", engine.getState().status === "game-over");
   check("The session tracks all five misses", engine.getState().misses === GUIDED_PATH_LENGTH);
+}
+
+{
+  const engine = new GuidedGameEngine(ladderDataset, "one-hit-wonders", 20260725);
+  const oneHitWonders = LADDER_CATEGORIES.find((c) => c.id === "one-hit-wonders")!;
+  const performerSongCounts = new Map<string, number>();
+  for (const song of ladderDataset.songs) {
+    performerSongCounts.set(song.performer, (performerSongCounts.get(song.performer) ?? 0) + 1);
+  }
+  let state = engine.getState();
+  check(
+    "One Hit Wonders round only offers eligible starter/anchor songs",
+    [state.board[GUIDED_PATH_POSITIONS[0].row][GUIDED_PATH_POSITIONS[0].col].tile, state.board[GUIDED_PATH_POSITIONS[6].row][GUIDED_PATH_POSITIONS[6].col].tile].every((tile) =>
+      oneHitWonders.isEligible(ladderDataset.songs[Number((tile as LadderSongTile).id)], { performerSongCounts }),
+    ),
+  );
+  check(
+    "One Hit Wonders choices are all eligible for the category",
+    state.choices.every((choice) => oneHitWonders.isEligible(ladderDataset.songs[Number(choice.id)], { performerSongCounts })),
+  );
 }
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);

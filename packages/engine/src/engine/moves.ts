@@ -63,7 +63,14 @@ function isSameYear(a: MatchableTile, b: MatchableTile): boolean {
  * per purchase.
  */
 export function bestConnectionReason(a: Tile, b: Tile): ConnectionReason | null {
-  if (a.kind === "WILDCARD" || b.kind === "WILDCARD" || a.kind === "CONNECTOR" || b.kind === "CONNECTOR") {
+  if (
+    a.kind === "WILDCARD" ||
+    b.kind === "WILDCARD" ||
+    a.kind === "CONNECTOR" ||
+    b.kind === "CONNECTOR" ||
+    a.kind === "LADDER_SONG" ||
+    b.kind === "LADDER_SONG"
+  ) {
     return null;
   }
   if (isCollab(a, b)) return "COLLAB";

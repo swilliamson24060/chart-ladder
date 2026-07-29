@@ -9,3 +9,7 @@ declare module "*/data/artists.json" {
   const value: any;
   export default value;
 }
+declare module "*/data/connections.json" {
+  const value: any;
+  export default value;
+}

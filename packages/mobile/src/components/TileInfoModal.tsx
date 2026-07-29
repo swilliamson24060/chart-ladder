@@ -14,9 +14,10 @@ import { colors } from "../theme";
 
 interface Props {
   cell: Cell | null;
-  dataset: Dataset;
   board: Board;
   onClose: () => void;
+  /** Only needed for the legacy free-play SONG/ARTIST/CONNECTOR tile kinds. */
+  dataset?: Dataset;
 }
 
 function yearList(years: number[]): string {
@@ -43,11 +44,19 @@ export function TileInfoModal({ cell, dataset, board, onClose }: Props) {
         ? colors.artist
         : colors.song;
   const value = tileValue(tile);
+  const kindLabel = tile.kind === "LADDER_SONG" ? "SONG" : tile.kind;
 
   let title = "";
   let rows: Array<{ label: string; value: string }> = [];
 
-  if (tile.kind === "SONG") {
+  if (tile.kind === "LADDER_SONG") {
+    title = tile.title;
+    rows = [
+      { label: "Performer", value: tile.performer },
+      { label: "Peak Position", value: `#${tile.peakPos}` },
+      { label: "Weeks On Chart", value: String(tile.maxWksOnChart) },
+    ];
+  } else if (tile.kind === "SONG" && dataset) {
     const performerNames = tile.performerIds
       .map((id) => dataset.artistById.get(id)?.name)
       .filter((name): name is string => !!name);
@@ -58,7 +67,7 @@ export function TileInfoModal({ cell, dataset, board, onClose }: Props) {
       { label: "Peak Position", value: `#${tile.peakPos}` },
       { label: "Point Value", value: `${value} pt${value === 1 ? "" : "s"}` },
     ];
-  } else if (tile.kind === "ARTIST") {
+  } else if (tile.kind === "ARTIST" && dataset) {
     // Represent the artist by their biggest hit (lowest peak position).
     const bestSong = tile.songIds
       .map((id) => dataset.songById.get(id))
@@ -74,7 +83,7 @@ export function TileInfoModal({ cell, dataset, board, onClose }: Props) {
       { label: "Peak Position", value: bestSong ? `#${bestSong.peakPos}` : "—" },
       { label: "Point Value", value: `${value} pt${value === 1 ? "" : "s"}` },
     ];
-  } else if (tile.kind === "CONNECTOR") {
+  } else if (tile.kind === "CONNECTOR" && dataset) {
     title = tileLabel(tile);
     const contentTile = board[tile.contentRow]?.[tile.contentCol]?.tile;
     const anchorTile = board[tile.anchorRow]?.[tile.anchorCol]?.tile;
@@ -131,7 +140,7 @@ export function TileInfoModal({ cell, dataset, board, onClose }: Props) {
         <Pressable style={[styles.card, { borderColor: accent }]} onPress={() => {}}>
           <View style={styles.headerRow}>
             <Text style={[styles.kindBadge, { color: accent, borderColor: accent }]}>
-              {tile.kind}
+              {kindLabel}
               {cell?.role ? ` · ${ROLE_LABELS[cell.role]}` : ""}
             </Text>
             <Pressable onPress={onClose} hitSlop={10}>

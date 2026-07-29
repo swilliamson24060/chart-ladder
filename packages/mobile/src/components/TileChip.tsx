@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { tileLabel, tileValue, type Tile } from "@chartcross/engine";
-import { colors, connectorDim } from "../theme";
+import { colors } from "../theme";
 
 interface Props {
   tile: Tile;
@@ -14,10 +14,19 @@ interface Props {
   fontScale?: number;
 }
 
+// Only ever populated by the legacy free-play engine's CONNECTOR tiles,
+// which the live ladder game never creates - kept local since the shared
+// theme's connection colors are keyed by the newer LadderTileKey instead.
 const CONNECTOR_ACCENT: Record<"COLLAB" | "ARTIST" | "SAME_YEAR", string> = {
   COLLAB: colors.collab,
   ARTIST: colors.connectorArtist,
   SAME_YEAR: colors.decade,
+};
+
+const CONNECTOR_DIM: Record<"COLLAB" | "ARTIST" | "SAME_YEAR", string> = {
+  COLLAB: colors.artistDim,
+  ARTIST: "#4a3016",
+  SAME_YEAR: "#1e4230",
 };
 
 export function TileChip({ tile, size, role, selected, dimmed, showValue, onPress, fontScale = 0.2 }: Props) {
@@ -32,7 +41,7 @@ export function TileChip({ tile, size, role, selected, dimmed, showValue, onPres
         ? colors.artist
         : colors.song;
   const backgroundColor = isConnector
-    ? connectorDim[tile.connectionType]
+    ? CONNECTOR_DIM[tile.connectionType]
     : isWildcard
       ? colors.wildcardDim
       : isArtist

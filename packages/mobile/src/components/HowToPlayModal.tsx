@@ -10,10 +10,11 @@ import {
   View,
 } from "react-native";
 import {
-  decadePoints,
   GUIDED_CONNECTION_BONUS,
   GUIDED_PATH_LENGTH,
   GUIDED_TILE_POINTS,
+  LADDER_TILE_LABELS,
+  LADDER_TILE_KEYS,
 } from "@chartcross/engine";
 import { colors } from "../theme";
 
@@ -76,40 +77,28 @@ export function HowToPlayModal({ visible, onClose, onWatchTutorial }: Props) {
             >
               <Section title="BUILD THE PATH">
                 <Text style={styles.body}>
-                  Connect the START artist to the ANCHOR artist by finding all {GUIDED_PATH_LENGTH} tiles
-                  in the prepared path. Correct tiles are placed on the board automatically.
+                  Connect the START song to the ANCHOR song by finding all {GUIDED_PATH_LENGTH} songs
+                  in the prepared chain. Correct songs are placed on the board automatically.
                 </Text>
               </Section>
 
               <Section title="CHOOSE A TILE">
                 <Text style={styles.body}>
-                  Each step presents three artists or songs from your selected category. Exactly one
-                  connects to the last tile on the path. A correct choice starts with{" "}
-                  {GUIDED_TILE_POINTS} points.
-                </Text>
-              </Section>
-
-              <Section title="TILE VALUES">
-                <Text style={styles.body}>
-                  Every correct tile also adds its decade value: a 2020s tile is worth{" "}
-                  {decadePoints(2023)} extra point, increasing by one per decade back to{" "}
-                  {decadePoints(1958)} points for the 1950s. For artists spanning several decades,
-                  the most recent decade determines the value.
-                </Text>
-                <Text style={styles.body}>
-                  The START artist's value is added to the first connection. The ANCHOR artist's
-                  value is added to the fifth and final connection.
+                  Each step presents three songs from your selected category. Exactly one connects to
+                  the last song on the path. A correct choice earns {GUIDED_TILE_POINTS} points.
                 </Text>
               </Section>
 
               <Section title="CONNECTION BONUS">
                 <Text style={styles.body}>
-                  After choosing the correct tile, identify whether the connection is COLLAB, ARTIST,
-                  or SAME YEAR. A correct answer adds {GUIDED_CONNECTION_BONUS} bonus points.
+                  After choosing the correct tile, name how it connects. You'll see three options - the
+                  correct one plus two random decoys - drawn from five possible connection types:{" "}
+                  {LADDER_TILE_KEYS.map((key) => LADDER_TILE_LABELS[key]).join(", ")}. A correct answer
+                  adds {GUIDED_CONNECTION_BONUS} bonus points.
                 </Text>
                 <Text style={styles.body}>
                   A wrong connection answer reveals the correct answer and forfeits only the bonus.
-                  Your correct tile still earns its base and decade-value points, and the path continues.
+                  Your correct tile still earns its base points, and the path continues.
                 </Text>
               </Section>
 
@@ -123,13 +112,12 @@ export function HowToPlayModal({ visible, onClose, onWatchTutorial }: Props) {
 
               <Section title="FINISH">
                 <Text style={styles.body}>
-                  A wrong artist/song choice earns 0 base points, but the correct tile is placed and
-                  you may still try for the connection bonus. The session ends after five tile misses.
+                  A wrong song choice earns 0 base points, but the correct tile is placed and you may
+                  still try for the connection bonus. The session ends after five tile misses.
                 </Text>
                 <Text style={styles.body}>
                   Complete all {GUIDED_PATH_LENGTH} steps to finish a path. You can add another round
                   to the same score, end and submit, or save at the completed path and resume later.
-                  There are no 2X or 3X board spaces.
                 </Text>
               </Section>
             </ScrollView>

@@ -1,39 +1,25 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import {
-  CONNECTION_CATEGORIES,
-  GUIDED_PATH_LENGTH,
-  type ConnectionCategory,
-  type MatchableTile,
-} from "@chartcross/engine";
-import { colors, connectorDim } from "../theme";
+import { GUIDED_PATH_LENGTH, LADDER_TILE_LABELS, type LadderSongTile, type LadderTileKey } from "@chartcross/engine";
+import { colors, connectionColors, connectorDim } from "../theme";
 import { TileChip } from "./TileChip";
 
 interface Props {
-  choices: MatchableTile[];
+  choices: LadderSongTile[];
+  /** 1 correct + up to 2 random decoys, shuffled - see GuidedGameEngine.chooseTile(). */
+  connectionChoices: LadderTileKey[];
   step: number;
   awaitingConnectionGuess: boolean;
-  hintReason: ConnectionCategory | null;
+  hintReason: LadderTileKey | null;
   /** Matches the size of tiles placed on the board (BoardGrid uses cellSize - 4). */
   tileSize: number;
   onChooseTile: (index: number) => void;
-  onGuessConnection: (reason: ConnectionCategory) => void;
+  onGuessConnection: (reason: LadderTileKey) => void;
 }
-
-const CONNECTION_LABELS: Record<ConnectionCategory, string> = {
-  COLLAB: "COLLAB",
-  ARTIST: "ARTIST",
-  SAME_YEAR: "SAME YEAR",
-};
-
-const CONNECTION_COLORS: Record<ConnectionCategory, string> = {
-  COLLAB: colors.collab,
-  ARTIST: colors.connectorArtist,
-  SAME_YEAR: colors.decade,
-};
 
 export function GuidedChoices({
   choices,
+  connectionChoices,
   step,
   awaitingConnectionGuess,
   hintReason,
@@ -48,7 +34,7 @@ export function GuidedChoices({
           <Text style={styles.heading}>BONUS: NAME THE CONNECTION</Text>
           <Text style={styles.instructions}>Correct answer: +10 points</Text>
           <View style={styles.connectionRow}>
-            {CONNECTION_CATEGORIES.map((reason) => (
+            {connectionChoices.map((reason) => (
               <Pressable
                 key={reason}
                 onPress={() => onGuessConnection(reason)}
@@ -57,13 +43,13 @@ export function GuidedChoices({
                   {
                     width: tileSize * 2,
                     height: tileSize,
-                    borderColor: CONNECTION_COLORS[reason],
+                    borderColor: connectionColors[reason],
                     backgroundColor: connectorDim[reason],
                   },
                 ]}
               >
-                <Text style={[styles.connectionText, { color: CONNECTION_COLORS[reason] }]}>
-                  {CONNECTION_LABELS[reason]}
+                <Text style={[styles.connectionText, { color: connectionColors[reason] }]}>
+                  {LADDER_TILE_LABELS[reason]}
                 </Text>
               </Pressable>
             ))}
@@ -75,17 +61,17 @@ export function GuidedChoices({
             CHOOSE THE NEXT TILE · {step + 1}/{GUIDED_PATH_LENGTH}
           </Text>
           {hintReason && (
-            <View style={[styles.hint, { borderColor: CONNECTION_COLORS[hintReason] }]}>
-              <Text style={[styles.hintText, { color: CONNECTION_COLORS[hintReason] }]}>
-                HINT: {CONNECTION_LABELS[hintReason]} CONNECTION
+            <View style={[styles.hint, { borderColor: connectionColors[hintReason] }]}>
+              <Text style={[styles.hintText, { color: connectionColors[hintReason] }]}>
+                HINT: {LADDER_TILE_LABELS[hintReason]} CONNECTION
               </Text>
             </View>
           )}
           <View style={styles.choiceRow}>
             {choices.map((tile, index) => (
-              <View key={`${tile.kind}-${tile.id}`} style={styles.choice}>
-                <TileChip tile={tile} size={tileSize} fontScale={0.17} showValue onPress={() => onChooseTile(index)} />
-                <Text style={styles.kind}>{tile.kind}</Text>
+              <View key={tile.id} style={styles.choice}>
+                <TileChip tile={tile} size={tileSize} fontScale={0.17} onPress={() => onChooseTile(index)} />
+                <Text style={styles.kind}>{tile.performer}</Text>
               </View>
             ))}
           </View>

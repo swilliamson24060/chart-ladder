@@ -1,16 +1,15 @@
 import React from "react";
 import Svg, { Line } from "react-native-svg";
-import { Board, getAllConnections, GRID_SIZE, type GuidedPathConnection } from "@chartcross/engine";
+import { GRID_SIZE, type GuidedPathConnection } from "@chartcross/engine";
 import { connectionColors } from "../theme";
 import { BOARD_RENDER_COLS } from "../boardLayout";
 
 interface Props {
-  board: Board;
   cellSize: number;
-  pathConnections?: GuidedPathConnection[];
+  pathConnections: GuidedPathConnection[];
 }
 
-export function ConnectionLines({ board, cellSize, pathConnections }: Props) {
+export function ConnectionLines({ cellSize, pathConnections }: Props) {
   const width = cellSize * BOARD_RENDER_COLS;
   const height = cellSize * GRID_SIZE;
   // Tiles are twice as wide as a grid cell, anchored at their cell's
@@ -21,7 +20,7 @@ export function ConnectionLines({ board, cellSize, pathConnections }: Props) {
     y: row * cellSize + cellSize / 2,
   });
 
-  const lines = (pathConnections ?? getAllConnections(board)).map((c) => {
+  const lines = pathConnections.map((c) => {
     const a = center(c.fromRow, c.fromCol);
     const b = center(c.toRow, c.toCol);
     return (

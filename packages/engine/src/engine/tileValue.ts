@@ -22,6 +22,9 @@ export function decadePoints(year: number): number {
  */
 export function tileValue(tile: Tile): number {
   if (tile.kind === "WILDCARD" || tile.kind === "CONNECTOR") return 0;
+  // The ladder dataset carries no chart-year data, so it can't earn a
+  // decade-based bonus - the ladder game scores with flat points instead.
+  if (tile.kind === "LADDER_SONG") return 0;
   if (tile.kind === "SONG") {
     return Math.min(decadePoints(tile.debutYear), decadePoints(tile.peakYear));
   }

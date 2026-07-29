@@ -12,7 +12,7 @@ interface Props {
   highlightCells: Set<string>;
   pendingActionCell?: { row: number; col: number } | null;
   onCellPress: (row: number, col: number) => void;
-  pathConnections?: GuidedPathConnection[];
+  pathConnections: GuidedPathConnection[];
 }
 
 export function BoardGrid({
@@ -65,7 +65,7 @@ export function BoardGrid({
         </View>
       ))}
 
-      <ConnectionLines board={board} cellSize={cellSize} pathConnections={pathConnections} />
+      <ConnectionLines cellSize={cellSize} pathConnections={pathConnections} />
 
       {/* Wide tiles are rendered as a separate absolute layer, positioned by
           their origin cell, so they can visually overflow into the next

@@ -56,7 +56,23 @@ export interface ConnectorTile {
   anchorCol: number;
 }
 
-export type Tile = SongTile | ArtistTile | WildcardTile | ConnectorTile;
+/**
+ * A song from the connections-based ladder dataset (data/connections.json) -
+ * distinct from SongTile because that dataset has no chart-year data, only
+ * title/performer/peak position/weeks-on-chart. Used exclusively by the
+ * ladder game (see ladder.ts); the legacy SongTile/ArtistTile pair above
+ * remains for the older free-play engine.
+ */
+export interface LadderSongTile {
+  kind: "LADDER_SONG";
+  id: string;
+  title: string;
+  performer: string;
+  peakPos: number;
+  maxWksOnChart: number;
+}
+
+export type Tile = SongTile | ArtistTile | WildcardTile | ConnectorTile | LadderSongTile;
 export type MatchableTile = SongTile | ArtistTile;
 
 export type MultiplierType =

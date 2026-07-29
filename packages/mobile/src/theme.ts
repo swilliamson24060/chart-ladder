@@ -26,15 +26,21 @@ export const colors = {
   rackSlotBorder: "#2a3660",
 };
 
-export const connectionColors: Record<"SAME_YEAR" | "ARTIST" | "COLLAB" | "WILDCARD", string> = {
-  SAME_YEAR: colors.decade,
-  ARTIST: colors.connectorArtist,
-  COLLAB: colors.collab,
+import type { LadderTileKey } from "@chartcross/engine";
+
+export const connectionColors: Record<LadderTileKey | "WILDCARD", string> = {
+  same_artist: colors.artist,
+  band_collab: colors.connectorArtist,
+  same_genre: colors.decade,
+  same_peak_pos: colors.song,
+  same_award: colors.wildcard,
   WILDCARD: colors.wildcard,
 };
 
-export const connectorDim: Record<"SAME_YEAR" | "ARTIST" | "COLLAB", string> = {
-  SAME_YEAR: "#1e4230",
-  ARTIST: "#4a3016",
-  COLLAB: colors.artistDim,
+export const connectorDim: Record<LadderTileKey, string> = {
+  same_artist: colors.artistDim,
+  band_collab: "#4a3016",
+  same_genre: "#1e4230",
+  same_peak_pos: colors.songDim,
+  same_award: colors.wildcardDim,
 };

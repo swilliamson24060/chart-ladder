@@ -1,11 +1,11 @@
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { tileLabel, type MatchableTile } from "@chartcross/engine";
+import { tileLabel, type LadderSongTile } from "@chartcross/engine";
 import { colors } from "../theme";
 
 interface Props {
   visible: boolean;
-  correctTile: MatchableTile | null;
+  correctTile: LadderSongTile | null;
   misses: number;
   canTryBonus: boolean;
   gameOver: boolean;

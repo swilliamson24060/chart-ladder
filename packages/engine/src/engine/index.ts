@@ -9,4 +9,4 @@ export * from "./tileValue";
 export * from "./tileLabel";
 export * from "./connections";
 export * from "./explainConnection";
-export * from "./guidedGame";
+export * from "./ladder";

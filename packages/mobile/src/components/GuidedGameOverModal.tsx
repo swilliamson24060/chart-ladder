@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { tileLabel, type GuidedGameStatus, type MatchableTile } from "@chartcross/engine";
+import { tileLabel, type GuidedGameStatus, type LadderSongTile } from "@chartcross/engine";
 import { MAX_NAME_LENGTH, submitScore } from "../leaderboard";
 import { colors } from "../theme";
 
@@ -9,7 +9,7 @@ interface Props {
   finalScore: number;
   misses: number;
   roundsCompleted: number;
-  correctTile: MatchableTile | null;
+  correctTile: LadderSongTile | null;
   onRestart: () => void;
   onScoreSubmitted: () => void;
 }

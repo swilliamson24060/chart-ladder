@@ -10,17 +10,18 @@ import {
 import { StatusBar } from "expo-status-bar";
 import {
   Cell,
-  ConnectionCategory,
   GRID_SIZE,
   GUIDED_PATH_LENGTH,
   GUIDED_PATH_POSITIONS,
   GuidedGameEngine,
+  type LadderTileKey,
   type GuidedSessionProgress,
 } from "@chartcross/engine";
 import { BOARD_RENDER_COLS } from "./src/boardLayout";
 import {
   defaultCategory,
   GAME_CATEGORIES,
+  ladderDataset,
   type GameCategory,
 } from "./src/dataset";
 import { colors } from "./src/theme";
@@ -42,7 +43,7 @@ import {
 } from "./src/savedGame";
 
 function newEngine(category: GameCategory, levelNumber: number, progress?: GuidedSessionProgress) {
-  return new GuidedGameEngine(category.dataset, Date.now() + levelNumber, progress);
+  return new GuidedGameEngine(ladderDataset, category.id, Date.now() + levelNumber, progress);
 }
 
 const HEADER_HEIGHT = 52;
@@ -121,7 +122,7 @@ export default function App() {
     }
   }
 
-  function handleGuessConnection(reason: ConnectionCategory) {
+  function handleGuessConnection(reason: LadderTileKey) {
     const followedTileMiss = gameState.missedCorrectTile !== null;
     const result = engineRef.current.guessConnection(reason);
     refresh();
@@ -303,6 +304,7 @@ export default function App() {
         {gameState.status === "playing" && (
           <GuidedChoices
             choices={gameState.choices}
+            connectionChoices={gameState.connectionChoices}
             step={gameState.step}
             awaitingConnectionGuess={gameState.awaitingConnectionGuess}
             hintReason={gameState.hintReason}
@@ -313,12 +315,7 @@ export default function App() {
         )}
       </View>
 
-      <TileInfoModal
-        cell={infoCell}
-        dataset={activeCategory.dataset}
-        board={gameState.board}
-        onClose={() => setInfoCell(null)}
-      />
+      <TileInfoModal cell={infoCell} board={gameState.board} onClose={() => setInfoCell(null)} />
       <GuidedGameOverModal
         status={showMissDialog ? "playing" : gameState.status}
         finalScore={gameState.score}

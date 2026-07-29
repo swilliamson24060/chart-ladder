@@ -9,6 +9,7 @@ const CONNECTOR_LABELS: Record<string, string> = {
 export function tileLabel(tile: Tile): string {
   if (tile.kind === "ARTIST") return tile.name;
   if (tile.kind === "SONG") return tile.title;
+  if (tile.kind === "LADDER_SONG") return tile.title;
   if (tile.kind === "CONNECTOR") return CONNECTOR_LABELS[tile.connectionType];
   return "★ Wildcard";
 }

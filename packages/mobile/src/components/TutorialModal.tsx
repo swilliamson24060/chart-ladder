@@ -1,22 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import {
-  bestConnectionReason,
-  explainConnection,
   GUIDED_CONNECTION_BONUS,
   GUIDED_PATH_LENGTH,
   GUIDED_PATH_POSITIONS,
   GUIDED_TILE_POINTS,
   GuidedGameEngine,
+  ladderConnectionReason,
+  LADDER_TILE_LABELS,
   tileLabel,
-  tileValue,
-  type ConnectionCategory,
   type GuidedGameState,
-  type MatchableTile,
+  type LadderSongTile,
+  type LadderTileKey,
 } from "@chartcross/engine";
 import { BOARD_RENDER_COLS } from "../boardLayout";
-import { defaultCategory } from "../dataset";
-import { colors, connectorDim } from "../theme";
+import { defaultCategory, ladderDataset } from "../dataset";
+import { colors, connectionColors, connectorDim } from "../theme";
 import { BoardGrid } from "./BoardGrid";
 import { TileChip } from "./TileChip";
 
@@ -33,10 +32,10 @@ type Phase = "intro" | "select-tile" | "select-connection" | "explain" | "done";
 
 interface PendingStep {
   step: number;
-  previousTile: MatchableTile;
+  previousTile: LadderSongTile;
   choiceIndex: number;
-  chosenTile: MatchableTile;
-  reason: ConnectionCategory;
+  chosenTile: LadderSongTile;
+  reason: LadderTileKey;
 }
 
 interface StepOutcome {
@@ -44,56 +43,34 @@ interface StepOutcome {
   scoreAfter: number;
 }
 
-const REASON_LABELS: Record<ConnectionCategory, string> = {
-  COLLAB: "COLLAB",
-  ARTIST: "ARTIST",
-  SAME_YEAR: "SAME YEAR",
-};
-
-const REASON_COLORS: Record<ConnectionCategory, string> = {
-  COLLAB: colors.collab,
-  ARTIST: colors.connectorArtist,
-  SAME_YEAR: colors.decade,
-};
-
-const CONNECTION_ORDER: ConnectionCategory[] = ["COLLAB", "ARTIST", "SAME_YEAR"];
-
-/** The one choice that actually connects to the previous path tile - decoys never do, by construction. */
-function findCorrectChoice(
-  previousTile: MatchableTile,
-  choices: MatchableTile[],
-): { index: number; reason: ConnectionCategory } | null {
+/** The index of the one choice that actually connects to the previous path tile - decoys never do, by construction. */
+function findCorrectChoiceIndex(previousTile: LadderSongTile, choices: LadderSongTile[]): number {
   for (let i = 0; i < choices.length; i++) {
-    const reason = bestConnectionReason(previousTile, choices[i]);
-    if (reason && reason !== "WILDCARD") return { index: i, reason: reason as ConnectionCategory };
+    if (ladderConnectionReason(previousTile, choices[i], ladderDataset) !== null) return i;
   }
-  return null;
+  return -1;
 }
 
-function explanationLines(previousTile: MatchableTile, chosenTile: MatchableTile, reason: ConnectionCategory): string[] {
-  const explanation = explainConnection(previousTile, chosenTile, reason, defaultCategory.dataset);
-  if (explanation.reason === "SAME_YEAR") {
-    return [`Both charted in ${explanation.sharedYears.join(", ")}.`];
+function explanationLine(reason: LadderTileKey, previousTile: LadderSongTile, chosenTile: LadderSongTile): string {
+  switch (reason) {
+    case "same_artist":
+      return previousTile.performer === chosenTile.performer
+        ? `Both performed by ${chosenTile.performer}.`
+        : `${previousTile.performer} and ${chosenTile.performer} share the same artist identity.`;
+    case "band_collab":
+      return `${previousTile.performer} and ${chosenTile.performer} are linked by a collaboration or shared band member.`;
+    case "same_genre":
+      return "Both songs share a genre.";
+    case "same_peak_pos":
+      return `Both peaked at #${chosenTile.peakPos} on the Hot 100.`;
+    case "same_award":
+      return "Both songs won the same award.";
   }
-  if (explanation.reason === "COLLAB") {
-    return explanation.songs.length > 0
-      ? [`They collaborated on "${explanation.songs.map((s) => s.title).join('", "')}".`]
-      : ["These two artists have worked together."];
-  }
-  if (explanation.reason === "ARTIST") {
-    if (explanation.sharedPerformerNames) {
-      return explanation.sharedPerformerNames.length > 0
-        ? [`Both performed by ${explanation.sharedPerformerNames.join(", ")}.`]
-        : ["They share a performer."];
-    }
-    return [`${explanation.artistName ?? "The artist"} performed "${explanation.songTitle ?? "this song"}".`];
-  }
-  return [];
 }
 
-function tileAt(state: GuidedGameState, index: number): MatchableTile {
+function tileAt(state: GuidedGameState, index: number): LadderSongTile {
   const pos = GUIDED_PATH_POSITIONS[index];
-  return state.board[pos.row][pos.col].tile as MatchableTile;
+  return state.board[pos.row][pos.col].tile as LadderSongTile;
 }
 
 export function TutorialModal({ visible, onFinish }: Props) {
@@ -110,7 +87,7 @@ export function TutorialModal({ visible, onFinish }: Props) {
 
   useEffect(() => {
     if (!visible) return;
-    engineRef.current = new GuidedGameEngine(defaultCategory.dataset, TUTORIAL_SEED);
+    engineRef.current = new GuidedGameEngine(ladderDataset, defaultCategory.id, TUTORIAL_SEED);
     setGameState(engineRef.current.getState());
     setPending(null);
     setOutcome(null);
@@ -124,22 +101,29 @@ export function TutorialModal({ visible, onFinish }: Props) {
     if (!visible || !gameState || pending) return;
     if (phase !== "select-tile") return;
 
-    if (gameState.status !== "playing") {
+    const engine = engineRef.current;
+    if (!engine || gameState.status !== "playing") {
       setPhase("done");
       return;
     }
     const previousTile = tileAt(gameState, gameState.step);
-    const found = findCorrectChoice(previousTile, gameState.choices);
-    if (!found) {
+    const choices = gameState.choices as LadderSongTile[];
+    const choiceIndex = findCorrectChoiceIndex(previousTile, choices);
+    // A song pair can connect through more than one tile type at once, so
+    // ask the engine which one the route actually committed to rather than
+    // re-deriving it independently (which could legitimately disagree
+    // while still being "a" valid connection).
+    const reason = engine.peekCurrentReason();
+    if (choiceIndex === -1 || !reason) {
       setPhase("done");
       return;
     }
     setPending({
       step: gameState.step,
       previousTile,
-      choiceIndex: found.index,
-      chosenTile: gameState.choices[found.index],
-      reason: found.reason,
+      choiceIndex,
+      chosenTile: choices[choiceIndex],
+      reason,
     });
   }, [phase, visible, gameState, pending]);
 
@@ -178,8 +162,6 @@ export function TutorialModal({ visible, onFinish }: Props) {
   const anchorEdge = gameState.completedConnections[GUIDED_PATH_LENGTH];
   const pathStarterTile = tileAt(gameState, 0);
   const pathAnchorTile = tileAt(gameState, GUIDED_PATH_POSITIONS.length - 1);
-  const starterTile = pending?.step === 0 ? pathStarterTile : null;
-  const anchorTile = pending?.step === GUIDED_PATH_LENGTH - 1 ? pathAnchorTile : null;
 
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onFinish}>
@@ -209,12 +191,12 @@ export function TutorialModal({ visible, onFinish }: Props) {
               <View style={styles.explainCard}>
                 <Text style={styles.explainTitle}>STARTER &amp; ANCHOR</Text>
                 <Text style={styles.explainLine}>
-                  Every path starts at a pink STARTER artist and ends at a blue ANCHOR artist - both are
+                  Every path starts at a pink STARTER song and ends at a blue ANCHOR song - both are
                   already placed on the board for you: "{tileLabel(pathStarterTile)}" and "
                   {tileLabel(pathAnchorTile)}" this time.
                 </Text>
                 <Text style={styles.explainLine}>
-                  Your job is to find the 5 tiles in between that connect STARTER all the way to ANCHOR,
+                  Your job is to find the 5 songs in between that connect STARTER all the way to ANCHOR,
                   one correct choice at a time.
                 </Text>
                 <Pressable style={styles.button} onPress={handleStartFromIntro}>
@@ -227,28 +209,27 @@ export function TutorialModal({ visible, onFinish }: Props) {
               <View style={styles.explainCard}>
                 <Text style={styles.explainTitle}>PICK THE NEXT TILE</Text>
                 <Text style={styles.explainLine}>
-                  Each step gives you three artists or songs. Only one of them connects to{" "}
-                  {pending.step === 0 ? "the starter tile" : "the previously correct tile in the chain"} -
-                  by sharing a chart year, a performer, or an artist collaboration. The other two are
-                  decoys that don't connect at all.
+                  Each step gives you three songs. Only one of them connects to{" "}
+                  {pending.step === 0 ? "the starter song" : "the previously correct song in the chain"} -
+                  by sharing an artist, a genre, a peak chart position, an award, or a collaboration/band
+                  connection. The other two are decoys that don't connect at all.
                 </Text>
                 <Text style={styles.explainLine}>
                   Here, "{tileLabel(pending.chosenTile)}" (highlighted below) is the right pick because
                   it connects to "{tileLabel(pending.previousTile)}",{" "}
-                  {pending.step === 0 ? "the starter tile" : "the previously correct tile in the chain"}.
+                  {pending.step === 0 ? "the starter song" : "the previously correct song in the chain"}.
                 </Text>
                 <View style={styles.choiceRow}>
-                  {gameState.choices.map((tile, index) => (
-                    <View key={`${tile.kind}-${tile.id}`} style={styles.choice}>
+                  {(gameState.choices as LadderSongTile[]).map((tile, index) => (
+                    <View key={tile.id} style={styles.choice}>
                       <TileChip
                         tile={tile}
                         size={cellSize - 4}
                         fontScale={0.17}
-                        showValue
                         selected={index === pending.choiceIndex}
                         dimmed={index !== pending.choiceIndex}
                       />
-                      <Text style={styles.kind}>{tile.kind}</Text>
+                      <Text style={styles.kind}>{tile.performer}</Text>
                     </View>
                   ))}
                 </View>
@@ -262,16 +243,17 @@ export function TutorialModal({ visible, onFinish }: Props) {
               <View style={styles.explainCard}>
                 <Text style={styles.explainTitle}>NAME THE CONNECTION</Text>
                 <Text style={styles.explainLine}>
-                  Once the right tile is placed, you can earn a bonus by naming how it connects: COLLAB
-                  (the two artists worked together), ARTIST (the same performer is on both), or SAME YEAR
-                  (they both charted in the same year).
+                  Once the right tile is placed, you can earn a bonus by naming how it connects. You'll
+                  see three options - the correct one plus two random decoys drawn from five possible
+                  connection types.
                 </Text>
                 <Text style={styles.explainLine}>
-                  Here, the connection is {REASON_LABELS[pending.reason]} (highlighted below). Guessing
-                  right adds bonus points; guessing wrong just reveals the answer and skips the bonus.
+                  Here, the connection is {LADDER_TILE_LABELS[pending.reason]} (highlighted below).
+                  Guessing right adds bonus points; guessing wrong just reveals the answer and skips the
+                  bonus.
                 </Text>
                 <View style={styles.connectionRow}>
-                  {CONNECTION_ORDER.map((reason) => {
+                  {gameState.connectionChoices.map((reason) => {
                     const isChosen = reason === pending.reason;
                     return (
                       <View
@@ -281,15 +263,15 @@ export function TutorialModal({ visible, onFinish }: Props) {
                           {
                             width: (cellSize - 4) * 2,
                             height: cellSize - 4,
-                            borderColor: REASON_COLORS[reason],
+                            borderColor: connectionColors[reason],
                             backgroundColor: connectorDim[reason],
                             opacity: isChosen ? 1 : 0.4,
                             borderWidth: isChosen ? 3 : 2,
                           },
                         ]}
                       >
-                        <Text style={[styles.connectionText, { color: REASON_COLORS[reason] }]}>
-                          {REASON_LABELS[reason]}
+                        <Text style={[styles.connectionText, { color: connectionColors[reason] }]}>
+                          {LADDER_TILE_LABELS[reason]}
                         </Text>
                       </View>
                     );
@@ -303,44 +285,23 @@ export function TutorialModal({ visible, onFinish }: Props) {
 
             {phase === "explain" && pending && outcome && (
               <View style={styles.explainCard}>
-                <Text style={styles.explainTitle}>
-                  {pending.chosenTile.kind} · {tileLabel(pending.chosenTile)}
+                <Text style={styles.explainTitle}>SONG · {tileLabel(pending.chosenTile)}</Text>
+                <Text style={styles.explainLine}>
+                  •  {explanationLine(pending.reason, pending.previousTile, pending.chosenTile)} (
+                  {LADDER_TILE_LABELS[pending.reason]})
                 </Text>
-                {explanationLines(pending.previousTile, pending.chosenTile, pending.reason).map((line, i) => (
-                  <Text key={i} style={styles.explainLine}>
-                    •  {line} ({REASON_LABELS[pending.reason]})
-                  </Text>
-                ))}
                 {pending.step === GUIDED_PATH_LENGTH - 1 && anchorEdge && (
                   <>
                     <Text style={styles.explainLine}>
-                      It also links automatically to the ANCHOR artist, "{tileLabel(pathAnchorTile)}":
+                      It also links automatically to the ANCHOR song, "{tileLabel(pathAnchorTile)}":
                     </Text>
-                    {explanationLines(
-                      pending.chosenTile,
-                      pathAnchorTile,
-                      anchorEdge.reason as ConnectionCategory,
-                    ).map((line, i) => (
-                      <Text key={`anchor-${i}`} style={styles.explainLine}>
-                        •  {line} ({REASON_LABELS[anchorEdge.reason as ConnectionCategory]})
-                      </Text>
-                    ))}
+                    <Text style={styles.explainLine}>
+                      •  {explanationLine(anchorEdge.reason, pending.chosenTile, pathAnchorTile)} (
+                      {LADDER_TILE_LABELS[anchorEdge.reason]})
+                    </Text>
                   </>
                 )}
                 <Text style={styles.explainScore}>Tile points: +{GUIDED_TILE_POINTS} pts</Text>
-                <Text style={styles.explainScore}>
-                  Tile value: +{tileValue(pending.chosenTile)} pts (it's worth more the further back its decade is)
-                </Text>
-                {starterTile && (
-                  <Text style={styles.explainScore}>
-                    STARTER value: +{tileValue(starterTile)} pts (only added on the first step)
-                  </Text>
-                )}
-                {anchorTile && (
-                  <Text style={styles.explainScore}>
-                    ANCHOR value: +{tileValue(anchorTile)} pts (only added on the final step)
-                  </Text>
-                )}
                 <Text style={[styles.explainScore, { color: colors.decade }]}>
                   Connection bonus (correct guess): +{GUIDED_CONNECTION_BONUS} pts
                 </Text>
@@ -360,14 +321,12 @@ export function TutorialModal({ visible, onFinish }: Props) {
                 <Text style={styles.explainTitle}>THE WHOLE CHAIN</Text>
                 <Text style={styles.explainLine}>Here's every link from STARTER to ANCHOR, start to finish:</Text>
                 {gameState.completedConnections.map((edge, i) => {
-                  const fromTile = gameState.board[edge.fromRow][edge.fromCol].tile as MatchableTile;
-                  const toTile = gameState.board[edge.toRow][edge.toCol].tile as MatchableTile;
-                  const reason = edge.reason as ConnectionCategory;
-                  const [line] = explanationLines(fromTile, toTile, reason);
+                  const fromTile = gameState.board[edge.fromRow][edge.fromCol].tile as LadderSongTile;
+                  const toTile = gameState.board[edge.toRow][edge.toCol].tile as LadderSongTile;
                   return (
                     <Text key={i} style={styles.explainLine}>
-                      •  "{tileLabel(fromTile)}" → "{tileLabel(toTile)}" — {REASON_LABELS[reason]}
-                      {line ? `: ${line}` : ""}
+                      •  "{tileLabel(fromTile)}" → "{tileLabel(toTile)}" — {LADDER_TILE_LABELS[edge.reason]}:{" "}
+                      {explanationLine(edge.reason, fromTile, toTile)}
                     </Text>
                   );
                 })}
