@@ -10,6 +10,7 @@ interface Props {
   onContinue: () => void;
   onSave: () => void;
   onEnd: () => void;
+  onViewChain: () => void;
 }
 
 export function RoundCompleteModal({
@@ -20,6 +21,7 @@ export function RoundCompleteModal({
   onContinue,
   onSave,
   onEnd,
+  onViewChain,
 }: Props) {
   if (!visible) return null;
 
@@ -32,6 +34,9 @@ export function RoundCompleteModal({
           <Text style={styles.score}>{score.toLocaleString()} POINTS</Text>
           <Text style={styles.misses}>{misses}/5 tile misses used</Text>
 
+          <Pressable style={[styles.button, styles.chainButton]} onPress={onViewChain}>
+            <Text style={styles.chainButtonText}>🔗 VIEW CONNECTION CHAIN</Text>
+          </Pressable>
           <Pressable style={[styles.button, styles.continueButton]} onPress={onContinue}>
             <Text style={styles.buttonText}>ADD ANOTHER ROUND</Text>
           </Pressable>
@@ -103,6 +108,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.songDim,
     borderWidth: 1,
     borderColor: colors.song,
+  },
+  chainButton: {
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+    borderColor: colors.textSecondary,
+  },
+  chainButtonText: {
+    color: colors.textSecondary,
+    fontWeight: "800",
+    letterSpacing: 0.6,
   },
   buttonText: {
     color: "#fff",

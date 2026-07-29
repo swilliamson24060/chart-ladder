@@ -336,8 +336,8 @@ export function TutorialModal({ visible, onFinish }: Props) {
                   );
                 })}
                 <Text style={[styles.explainLine, { marginTop: 8 }]}>
-                  That's the idea! Five wrong tiles ends a real session, so use the 💡 hint if you're
-                  stuck (it costs that step's bonus).
+                  That's the idea! Five wrong tiles ends a real session. After finishing a path, tap 🔗
+                  VIEW CONNECTION CHAIN any time to review it like this again.
                 </Text>
                 <Pressable style={styles.button} onPress={onFinish}>
                   <Text style={styles.buttonText}>START PLAYING</Text>

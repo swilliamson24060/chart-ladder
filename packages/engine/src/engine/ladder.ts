@@ -452,7 +452,6 @@ export interface GuidedGameState {
   roundsCompleted: number;
   status: GuidedGameStatus;
   awaitingConnectionGuess: boolean;
-  hintReason: LadderTileKey | null;
   completedConnections: GuidedPathConnection[];
   missedCorrectTile: LadderSongTile | null;
 }
@@ -490,7 +489,6 @@ export class GuidedGameEngine {
   private roundsCompleted = 0;
   private status: GuidedGameStatus = "playing";
   private awaitingConnectionGuess = false;
-  private hintReason: LadderTileKey | null = null;
   private completedConnections: GuidedPathConnection[] = [];
   private missedCorrectTile: LadderSong | null = null;
   private pendingBasePoints = 0;
@@ -580,7 +578,6 @@ export class GuidedGameEngine {
     this.score += points;
     this.step++;
     this.awaitingConnectionGuess = false;
-    this.hintReason = null;
     this.connectionChoices = [];
     this.pendingBasePoints = 0;
     this.currentTilePlaced = false;
@@ -614,25 +611,18 @@ export class GuidedGameEngine {
       roundsCompleted: this.roundsCompleted,
       status: this.status,
       awaitingConnectionGuess: this.awaitingConnectionGuess,
-      hintReason: this.hintReason,
       completedConnections: [...this.completedConnections],
       missedCorrectTile: this.missedCorrectTile ? toTile(this.missedCorrectTile) : null,
     };
   }
 
-  useHint(): LadderTileKey | null {
-    if (this.status !== "playing" || this.awaitingConnectionGuess) return null;
-    this.hintReason = this.route.reasons[this.step];
-    return this.hintReason;
-  }
-
   /**
    * The current step's actual correct connection reason, without revealing
-   * it to the player or forfeiting the bonus (unlike useHint()). A song
-   * pair can legitimately connect through more than one tile type at once
-   * (e.g. same genre AND same peak position); this is the one the route
-   * actually committed to, needed by callers (tests, the tutorial) that
-   * can't otherwise tell which of several valid answers the engine expects.
+   * it to the player. A song pair can legitimately connect through more
+   * than one tile type at once (e.g. same genre AND same peak position);
+   * this is the one the route actually committed to, needed by callers
+   * (tests, the tutorial) that can't otherwise tell which of several valid
+   * answers the engine expects.
    */
   peekCurrentReason(): LadderTileKey | null {
     if (this.status !== "playing") return null;
@@ -666,19 +656,6 @@ export class GuidedGameEngine {
         needsConnectionGuess: false,
         correctTile: toTile(correctTile),
         pointsAwarded: 0,
-        misses: this.misses,
-        status: this.status,
-      };
-    }
-
-    if (this.hintReason) {
-      const pointsAwarded = this.completeStep(false);
-      return {
-        correct: !missed,
-        missed,
-        needsConnectionGuess: false,
-        correctTile: toTile(correctTile),
-        pointsAwarded,
         misses: this.misses,
         status: this.status,
       };
@@ -723,7 +700,6 @@ export class GuidedGameEngine {
     this.step = 0;
     this.status = "playing";
     this.awaitingConnectionGuess = false;
-    this.hintReason = null;
     this.completedConnections = [];
     this.missedCorrectTile = null;
     this.pendingBasePoints = 0;

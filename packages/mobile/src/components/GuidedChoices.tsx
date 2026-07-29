@@ -10,7 +10,6 @@ interface Props {
   connectionChoices: LadderTileKey[];
   step: number;
   awaitingConnectionGuess: boolean;
-  hintReason: LadderTileKey | null;
   /** Matches the size of tiles placed on the board (BoardGrid uses cellSize - 4). */
   tileSize: number;
   onChooseTile: (index: number) => void;
@@ -22,7 +21,6 @@ export function GuidedChoices({
   connectionChoices,
   step,
   awaitingConnectionGuess,
-  hintReason,
   tileSize,
   onChooseTile,
   onGuessConnection,
@@ -60,13 +58,6 @@ export function GuidedChoices({
           <Text style={styles.heading}>
             CHOOSE THE NEXT TILE · {step + 1}/{GUIDED_PATH_LENGTH}
           </Text>
-          {hintReason && (
-            <View style={[styles.hint, { borderColor: connectionColors[hintReason] }]}>
-              <Text style={[styles.hintText, { color: connectionColors[hintReason] }]}>
-                HINT: {LADDER_TILE_LABELS[hintReason]} CONNECTION
-              </Text>
-            </View>
-          )}
           <View style={styles.choiceRow}>
             {choices.map((tile, index) => (
               <View key={tile.id} style={styles.choice}>
@@ -112,19 +103,6 @@ const styles = StyleSheet.create({
   },
   choice: {
     alignItems: "center",
-  },
-  hint: {
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginBottom: 10,
-    backgroundColor: colors.boardBackground,
-  },
-  hintText: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.7,
   },
   connectionRow: {
     flexDirection: "row",

@@ -104,11 +104,10 @@ export function HowToPlayModal({ visible, onClose, onWatchTutorial }: Props) {
                 </Text>
               </Section>
 
-              <Section title="HINT">
+              <Section title="REVIEW THE CHAIN">
                 <Text style={styles.body}>
-                  Tap the light bulb before choosing a tile to reveal the connection type. You can
-                  still earn the {GUIDED_TILE_POINTS} tile points, but the {GUIDED_CONNECTION_BONUS}-point
-                  connection bonus is forfeited for that step.
+                  After completing a path, tap 🔗 VIEW CONNECTION CHAIN to review every song and how it
+                  connects to the next, start to finish.
                 </Text>
               </Section>
 

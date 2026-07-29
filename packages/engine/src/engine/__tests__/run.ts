@@ -1098,33 +1098,26 @@ const topTier = LADDER_CATEGORIES.find((c) => c.id === "top-tier")!;
     const validChoices = reasons.filter((r) => r !== null);
     check(`Step ${step + 1} has exactly one connecting choice`, validChoices.length === 1);
 
-    if (step === 0) {
-      const hint = engine.useHint();
-      check("Hint reveals a valid connection type", hint !== null && hint === engine.peekCurrentReason());
-      const result = engine.chooseTile(correctIndex);
-      check("First tile awards flat base points only (hint forfeits the bonus)", result.pointsAwarded === GUIDED_TILE_POINTS);
-    } else {
-      const choiceResult = engine.chooseTile(correctIndex);
-      check(`Step ${step + 1} waits for a connection guess`, choiceResult.needsConnectionGuess);
-      // A song pair can connect through more than one tile type at once, so
-      // ask the engine which one the route actually committed to rather
-      // than re-deriving it independently (which could legitimately
-      // disagree while still being "a" valid connection).
-      const correctReason = engine.peekCurrentReason()!;
-      const afterChoice = engine.getState();
-      check(
-        `Step ${step + 1} offers three connection choices including the correct one`,
-        afterChoice.connectionChoices.length === 3 && afterChoice.connectionChoices.includes(correctReason),
-      );
-      const guessedReason =
-        step === 1 ? LADDER_TILE_KEYS.find((reason) => reason !== correctReason)! : correctReason;
-      const guessResult = engine.guessConnection(guessedReason);
-      const expected = GUIDED_TILE_POINTS + (step === 1 ? 0 : GUIDED_CONNECTION_BONUS);
-      check(`Step ${step + 1} awards the expected score`, guessResult.pointsAwarded === expected);
-      if (step === 1) {
-        check("Wrong connection guess reveals the correct reason", guessResult.correctReason === correctReason);
-        check("Wrong connection guess does not end the game", guessResult.status === "playing");
-      }
+    const choiceResult = engine.chooseTile(correctIndex);
+    check(`Step ${step + 1} waits for a connection guess`, choiceResult.needsConnectionGuess);
+    // A song pair can connect through more than one tile type at once, so
+    // ask the engine which one the route actually committed to rather
+    // than re-deriving it independently (which could legitimately
+    // disagree while still being "a" valid connection).
+    const correctReason = engine.peekCurrentReason()!;
+    const afterChoice = engine.getState();
+    check(
+      `Step ${step + 1} offers three connection choices including the correct one`,
+      afterChoice.connectionChoices.length === 3 && afterChoice.connectionChoices.includes(correctReason),
+    );
+    const guessedReason =
+      step === 1 ? LADDER_TILE_KEYS.find((reason) => reason !== correctReason)! : correctReason;
+    const guessResult = engine.guessConnection(guessedReason);
+    const expected = GUIDED_TILE_POINTS + (step === 1 ? 0 : GUIDED_CONNECTION_BONUS);
+    check(`Step ${step + 1} awards the expected score`, guessResult.pointsAwarded === expected);
+    if (step === 1) {
+      check("Wrong connection guess reveals the correct reason", guessResult.correctReason === correctReason);
+      check("Wrong connection guess does not end the game", guessResult.status === "playing");
     }
   }
 

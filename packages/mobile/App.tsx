@@ -28,6 +28,7 @@ import {
 import { colors } from "./src/theme";
 import { BoardGrid } from "./src/components/BoardGrid";
 import { CategorySelectModal } from "./src/components/CategorySelectModal";
+import { ConnectionChainModal } from "./src/components/ConnectionChainModal";
 import { GuidedChoices } from "./src/components/GuidedChoices";
 import { GuidedGameOverModal } from "./src/components/GuidedGameOverModal";
 import { HowToPlayModal } from "./src/components/HowToPlayModal";
@@ -72,6 +73,7 @@ export default function App() {
   const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState(0);
   const [savedGame, setSavedGame] = useState<SavedGuidedGame | null>(null);
   const [showMissDialog, setShowMissDialog] = useState(false);
+  const [showChainModal, setShowChainModal] = useState(false);
 
   useEffect(() => {
     loadSavedGame().then(setSavedGame).catch(() => setSavedGame(null));
@@ -141,11 +143,12 @@ export default function App() {
     }
   }
 
-  function handleHint() {
-    const reason = engineRef.current.useHint();
-    if (!reason) return;
-    refresh();
-    showToast(`Hint: use a ${LADDER_TILE_LABELS[reason]} connection. The 10-point bonus is now forfeited.`);
+  function handleViewChain() {
+    setShowChainModal(true);
+  }
+
+  function handleCloseChain() {
+    setShowChainModal(false);
   }
 
   function handleCellPress(row: number, col: number) {
@@ -169,6 +172,7 @@ export default function App() {
     setSavedGame(null);
     setToast(null);
     setShowMissDialog(false);
+    setShowChainModal(false);
     setInfoCell(null);
     refresh();
   }
@@ -196,6 +200,7 @@ export default function App() {
     setSavedGame(null);
     setToast(null);
     setShowMissDialog(false);
+    setShowChainModal(false);
     setInfoCell(null);
     setShowCategorySelect(false);
     refresh();
@@ -206,6 +211,7 @@ export default function App() {
     setToast(null);
     setInfoCell(null);
     setShowMissDialog(false);
+    setShowChainModal(false);
     refresh();
   }
 
@@ -242,25 +248,11 @@ export default function App() {
     refresh();
   }
 
-  const hintEnabled =
-    gameState.status === "playing" &&
-    !gameState.awaitingConnectionGuess &&
-    gameState.hintReason === null;
-
   return (
     <View style={styles.app}>
       <StatusBar style="light" />
       <View style={styles.header}>
-        <View style={[styles.headerActions, styles.headerActionsLeft]}>
-          <Pressable
-            style={[styles.headerIconButton, !hintEnabled && styles.headerIconDisabled]}
-            onPress={handleHint}
-            disabled={!hintEnabled}
-            hitSlop={8}
-          >
-            <Text style={styles.headerIconText}>💡</Text>
-          </Pressable>
-        </View>
+        <View style={[styles.headerActions, styles.headerActionsLeft]} />
         <Text style={styles.title}>CHART LADDER</Text>
         <View style={styles.headerActions}>
           <Pressable style={styles.headerIconButton} onPress={() => setShowLeaderboard(true)} hitSlop={8}>
@@ -312,7 +304,6 @@ export default function App() {
             connectionChoices={gameState.connectionChoices}
             step={gameState.step}
             awaitingConnectionGuess={gameState.awaitingConnectionGuess}
-            hintReason={gameState.hintReason}
             tileSize={cellSize - 4}
             onChooseTile={handleChooseTile}
             onGuessConnection={handleGuessConnection}
@@ -339,13 +330,22 @@ export default function App() {
         onContinue={() => setShowMissDialog(false)}
       />
       <RoundCompleteModal
-        visible={gameState.status === "path-complete" && !showCategorySelect && !showMissDialog}
+        visible={
+          gameState.status === "path-complete" && !showCategorySelect && !showMissDialog && !showChainModal
+        }
         score={gameState.score}
         misses={gameState.misses}
         roundsCompleted={gameState.roundsCompleted}
         onContinue={handleContinueRound}
         onSave={handleSaveAndExit}
         onEnd={handleEndSession}
+        onViewChain={handleViewChain}
+      />
+      <ConnectionChainModal
+        visible={showChainModal}
+        board={gameState.board}
+        connections={gameState.completedConnections}
+        onClose={handleCloseChain}
       />
       <HowToPlayModal visible={showHowToPlay} onClose={handleCloseHowToPlay} onWatchTutorial={handleWatchTutorial} />
       <TutorialModal visible={showTutorial} onFinish={handleFinishTutorial} />
@@ -403,9 +403,6 @@ const styles = StyleSheet.create({
   },
   headerIconButton: {
     padding: 4,
-  },
-  headerIconDisabled: {
-    opacity: 0.3,
   },
   headerIconText: {
     fontSize: 20,
