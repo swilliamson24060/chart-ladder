@@ -259,7 +259,7 @@ export default function App() {
             <Text style={styles.headerIconText}>💡</Text>
           </Pressable>
         </View>
-        <Text style={styles.title}>CHART CROSS</Text>
+        <Text style={styles.title}>CHART LADDER</Text>
         <View style={styles.headerActions}>
           <Pressable style={styles.headerIconButton} onPress={() => setShowLeaderboard(true)} hitSlop={8}>
             <Text style={styles.headerIconText}>🏆</Text>
