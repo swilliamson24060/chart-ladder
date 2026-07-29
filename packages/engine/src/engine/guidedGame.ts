@@ -164,9 +164,11 @@ function chooseRelated(
   used: Set<string>,
   rng: () => number,
   artistsOnly = false,
+  excludeSameYear = false,
 ): { tile: MatchableTile; reason: ConnectionCategory } | null {
   const groups = relatedCandidates(tile, dataset, index);
   const available = shuffled(rng, CONNECTION_CATEGORIES)
+    .filter((reason) => !excludeSameYear || reason !== "SAME_YEAR")
     .map((reason) => ({
       reason,
       candidates: groups[reason].filter(
@@ -182,6 +184,28 @@ function chooseRelated(
   return { tile: pickRandom(rng, group.candidates), reason: group.reason };
 }
 
+/**
+ * Prefers a connection other than SAME_YEAR once it's already been used
+ * elsewhere in the chain, but falls back to allowing it again rather than
+ * dead-ending the whole route - a rare fallback for small categories where
+ * COLLAB/ARTIST alone can't always bridge every step.
+ */
+function chooseRelatedCappingSameYear(
+  tile: MatchableTile,
+  dataset: Dataset,
+  index: RouteIndex,
+  used: Set<string>,
+  rng: () => number,
+  sameYearUsed: boolean,
+  artistsOnly = false,
+): { tile: MatchableTile; reason: ConnectionCategory } | null {
+  if (sameYearUsed) {
+    const withoutSameYear = chooseRelated(tile, dataset, index, used, rng, artistsOnly, true);
+    if (withoutSameYear) return withoutSameYear;
+  }
+  return chooseRelated(tile, dataset, index, used, rng, artistsOnly, false);
+}
+
 function buildRoute(dataset: Dataset, rng: () => number): Route {
   const index = routeIndex(dataset);
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -189,23 +213,27 @@ function buildRoute(dataset: Dataset, rng: () => number): Route {
     const used = new Set([tileKey(starter)]);
     const tiles: MatchableTile[] = [];
     const reasons: ConnectionCategory[] = [];
+    // SAME_YEAR should only be used once across the whole chain (the 5
+    // guided steps plus the automatic anchor connection).
+    let sameYearUsed = false;
     let current: MatchableTile = starter;
     let failed = false;
 
     for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
-      const next = chooseRelated(current, dataset, index, used, rng);
+      const next = chooseRelatedCappingSameYear(current, dataset, index, used, rng, sameYearUsed);
       if (!next) {
         failed = true;
         break;
       }
       tiles.push(next.tile);
       reasons.push(next.reason);
+      if (next.reason === "SAME_YEAR") sameYearUsed = true;
       used.add(tileKey(next.tile));
       current = next.tile;
     }
     if (failed) continue;
 
-    const anchorChoice = chooseRelated(current, dataset, index, used, rng, true);
+    const anchorChoice = chooseRelatedCappingSameYear(current, dataset, index, used, rng, sameYearUsed, true);
     if (!anchorChoice) continue;
     return {
       starter,
