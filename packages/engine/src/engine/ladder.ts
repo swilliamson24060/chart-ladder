@@ -94,14 +94,13 @@ export const LADDER_TILE_KEYS: LadderTileKey[] = [
 ];
 
 /**
- * These three tile keys have large, common groups that would otherwise
- * dominate a round if left fully random. Rather than a hard "once per
- * round" cap, each round rolls a per-key usage limit - 1 time (55%
- * chance), 2 times (30%), or 3 times (15%) - across the whole chain (the 5
- * guided steps plus the automatic anchor link).
+ * Any tile key can have a large, common group that would otherwise
+ * dominate a round if left fully random (e.g. band_collab, which has no
+ * "same artist"-style natural variety to compete with it). Rather than a
+ * hard "once per round" cap, every tile key rolls its own per-round usage
+ * limit - 1 time (55% chance), 2 times (30%), or 3 times (15%) - across
+ * the whole chain (the 5 guided steps plus the automatic anchor link).
  */
-const DISTRIBUTION_CONTROLLED_KEYS: readonly LadderTileKey[] = ["same_artist", "same_peak_pos", "same_genre"];
-
 function rollUsageCap(rng: () => number): number {
   const roll = rng();
   if (roll < 0.55) return 1;
@@ -321,7 +320,13 @@ interface LadderRoute {
   anchorReason: LadderTileKey;
 }
 
-/** Prefers a tile key that hasn't hit its rolled usage cap yet, falling back to any available key if that would leave no options. */
+/**
+ * Prefers a tile key that hasn't hit its rolled usage cap yet. If every
+ * available key is already at its cap (a dead-end step with no other
+ * option), falls back to the least-used available key rather than a
+ * uniform-random one - this keeps any single connection type from running
+ * away further over its cap than the dead end strictly requires.
+ */
 function pickTileKeyRespectingCaps(
   available: LadderTileKey[],
   rng: () => number,
@@ -332,7 +337,14 @@ function pickTileKeyRespectingCaps(
     const cap = usageCaps.get(key);
     return cap === undefined || (usageCounts.get(key) ?? 0) < cap;
   });
-  const tileKey = pickRandom(rng, withinCap.length > 0 ? withinCap : available);
+  let tileKey: LadderTileKey;
+  if (withinCap.length > 0) {
+    tileKey = pickRandom(rng, withinCap);
+  } else {
+    const minCount = Math.min(...available.map((key) => usageCounts.get(key) ?? 0));
+    const leastUsed = available.filter((key) => (usageCounts.get(key) ?? 0) === minCount);
+    tileKey = pickRandom(rng, leastUsed);
+  }
   usageCounts.set(tileKey, (usageCounts.get(tileKey) ?? 0) + 1);
   return tileKey;
 }
@@ -347,13 +359,22 @@ function buildLadderRoute(dataset: LadderDataset, categoryId: LadderCategoryId, 
     throw new Error(`No connected songs available for category "${categoryId}".`);
   }
 
+  // A route where no single connection type is used more than this many
+  // times is accepted immediately. If 200 attempts never find one (a
+  // dead-end-heavy category where some type is unavoidably dominant), the
+  // least-dominated route seen is used instead - this keeps "never fail to
+  // build a route" as an invariant while still strongly preferring variety.
+  const MAX_ACCEPTABLE_TYPE_COUNT = 3;
+  let bestRoute: LadderRoute | null = null;
+  let bestMaxTypeCount = Infinity;
+
   for (let attempt = 0; attempt < 200; attempt++) {
     const starter = pickRandom(rng, eligibleSongs);
     const usedIds = new Set<number>([starter.id]);
     const tiles: LadderSong[] = [];
     const reasons: LadderTileKey[] = [];
     const usageCaps = new Map<LadderTileKey, number>(
-      DISTRIBUTION_CONTROLLED_KEYS.map((key) => [key, rollUsageCap(rng)]),
+      usableTileKeys(category).map((key) => [key, rollUsageCap(rng)]),
     );
     const usageCounts = new Map<LadderTileKey, number>();
     let current = starter;
@@ -381,8 +402,15 @@ function buildLadderRoute(dataset: LadderDataset, categoryId: LadderCategoryId, 
     const anchorNeighbors = eligibleNeighborIds(current.id, anchorTileKey, dataset, index, category, usedIds);
     const anchor = dataset.songs[pickRandom(rng, anchorNeighbors)];
 
-    return { starter, anchor, tiles, reasons, anchorReason: anchorTileKey };
+    const route: LadderRoute = { starter, anchor, tiles, reasons, anchorReason: anchorTileKey };
+    const maxTypeCount = Math.max(...usageCounts.values());
+    if (maxTypeCount <= MAX_ACCEPTABLE_TYPE_COUNT) return route;
+    if (maxTypeCount < bestMaxTypeCount) {
+      bestRoute = route;
+      bestMaxTypeCount = maxTypeCount;
+    }
   }
+  if (bestRoute) return bestRoute;
   throw new Error(`Unable to prepare a five-song chain for category "${categoryId}".`);
 }
 
