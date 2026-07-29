@@ -14,6 +14,7 @@ import {
   GUIDED_PATH_LENGTH,
   GUIDED_PATH_POSITIONS,
   GuidedGameEngine,
+  LADDER_TILE_LABELS,
   type LadderTileKey,
   type GuidedSessionProgress,
 } from "@chartcross/engine";
@@ -134,7 +135,7 @@ export default function App() {
       );
     } else {
       showToast(
-        `Wrong connection. The answer was ${result.correctReason}. +${result.pointsAwarded} tile points.`,
+        `Wrong connection. The answer was ${LADDER_TILE_LABELS[result.correctReason]}. +${result.pointsAwarded} tile points.`,
         true,
       );
     }
@@ -144,7 +145,7 @@ export default function App() {
     const reason = engineRef.current.useHint();
     if (!reason) return;
     refresh();
-    showToast(`Hint: use a ${reason} connection. The 10-point bonus is now forfeited.`);
+    showToast(`Hint: use a ${LADDER_TILE_LABELS[reason]} connection. The 10-point bonus is now forfeited.`);
   }
 
   function handleCellPress(row: number, col: number) {
