@@ -34,6 +34,7 @@ export const connectionColors: Record<LadderTileKey | "WILDCARD", string> = {
   same_genre: colors.decade,
   same_peak_pos: colors.song,
   same_award: colors.wildcard,
+  weeks_on_chart: colors.chartBoost,
   WILDCARD: colors.wildcard,
 };
 
@@ -43,4 +44,5 @@ export const connectorDim: Record<LadderTileKey, string> = {
   same_genre: "#1e4230",
   same_peak_pos: colors.songDim,
   same_award: colors.wildcardDim,
+  weeks_on_chart: "#4a2f16",
 };

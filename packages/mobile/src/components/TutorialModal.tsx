@@ -65,6 +65,8 @@ function explanationLine(reason: LadderTileKey, previousTile: LadderSongTile, ch
       return `Both peaked at #${chosenTile.peakPos} on the Hot 100.`;
     case "same_award":
       return "Both songs won the same award.";
+    case "weeks_on_chart":
+      return "Both songs spent a similar number of weeks on the Hot 100.";
   }
 }
 

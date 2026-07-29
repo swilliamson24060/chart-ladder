@@ -71,12 +71,18 @@ export function buildLadderDataset(raw: LadderRawData): LadderDataset {
 // --- Guessable connection tiles ------------------------------------------
 
 /**
- * The five connection types a player can actually pick during a round -
- * each maps to one or two of the data pipeline's raw connection types (see
+ * The connection types a player can actually pick during a round - each
+ * maps to one or two of the data pipeline's raw connection types (see
  * scripts/round_selector.py, the reference design this mirrors). SAME_YEAR
  * isn't here: the ladder dataset has no year data at all.
  */
-export type LadderTileKey = "same_artist" | "band_collab" | "same_genre" | "same_peak_pos" | "same_award";
+export type LadderTileKey =
+  | "same_artist"
+  | "band_collab"
+  | "same_genre"
+  | "same_peak_pos"
+  | "same_award"
+  | "weeks_on_chart";
 
 export const LADDER_TILE_KEYS: LadderTileKey[] = [
   "same_artist",
@@ -84,6 +90,7 @@ export const LADDER_TILE_KEYS: LadderTileKey[] = [
   "same_genre",
   "same_peak_pos",
   "same_award",
+  "weeks_on_chart",
 ];
 
 /**
@@ -108,6 +115,7 @@ export const LADDER_TILE_LABELS: Record<LadderTileKey, string> = {
   same_genre: "SAME GENRE",
   same_peak_pos: "SAME PEAK POSITION",
   same_award: "SAME AWARD",
+  weeks_on_chart: "WEEKS ON CHART",
 };
 
 const LADDER_TILE_CONNECTION_TYPES: Record<LadderTileKey, LadderConnectionType[]> = {
@@ -116,6 +124,7 @@ const LADDER_TILE_CONNECTION_TYPES: Record<LadderTileKey, LadderConnectionType[]
   same_genre: ["same_song_genre"],
   same_peak_pos: ["same_peak_position"],
   same_award: ["same_award"],
+  weeks_on_chart: ["chart_longevity"],
 };
 
 // --- Categories (extensible - add an entry here for a new category) ------
@@ -131,6 +140,15 @@ export interface LadderCategoryDef {
   name: string;
   description: string;
   isEligible: (song: LadderSong, ctx: LadderCategoryContext) => boolean;
+  /**
+   * Tile keys that should never be offered - as the correct answer or a
+   * decoy - for this category, because the category's own eligibility
+   * rule makes that connection meaningless (e.g. every song in "We're
+   * Number 1!" already peaks at #1, so same_peak_pos would trivially match
+   * any two songs) or impossible (e.g. same_artist for One Hit Wonders,
+   * where every performer has exactly one song).
+   */
+  excludedTileKeys?: LadderTileKey[];
 }
 
 export const LADDER_CATEGORIES: LadderCategoryDef[] = [
@@ -139,6 +157,7 @@ export const LADDER_CATEGORIES: LadderCategoryDef[] = [
     name: "One Hit Wonders",
     description: "Artists with exactly one Hot 100 hit.",
     isEligible: (song, ctx) => ctx.performerSongCounts.get(song.performer) === 1,
+    excludedTileKeys: ["same_artist"],
   },
   {
     id: "lightning-strikes-twice",
@@ -151,6 +170,7 @@ export const LADDER_CATEGORIES: LadderCategoryDef[] = [
     name: "We're Number 1!",
     description: "Songs that reached the top of the Hot 100.",
     isEligible: (song) => song.peakPos === 1,
+    excludedTileKeys: ["same_peak_pos"],
   },
   {
     id: "top-tier",
@@ -164,6 +184,13 @@ function categoryById(id: LadderCategoryId): LadderCategoryDef {
   const category = LADDER_CATEGORIES.find((c) => c.id === id);
   if (!category) throw new Error(`Unknown ladder category "${id}".`);
   return category;
+}
+
+/** The tile keys actually usable for a category - LADDER_TILE_KEYS minus its excludedTileKeys, if any. */
+function usableTileKeys(category: LadderCategoryDef): LadderTileKey[] {
+  if (!category.excludedTileKeys || category.excludedTileKeys.length === 0) return LADDER_TILE_KEYS;
+  const excluded = category.excludedTileKeys;
+  return LADDER_TILE_KEYS.filter((key) => !excluded.includes(key));
 }
 
 function buildCategoryContext(dataset: LadderDataset): LadderCategoryContext {
@@ -279,7 +306,7 @@ function availableTileKeys(
   category: LadderCategoryDef,
   usedIds: Set<number>,
 ): LadderTileKey[] {
-  return LADDER_TILE_KEYS.filter(
+  return usableTileKeys(category).filter(
     (tileKey) => eligibleNeighborIds(songId, tileKey, dataset, index, category, usedIds).length > 0,
   );
 }
@@ -379,23 +406,20 @@ function shuffled<T>(rng: () => number, items: T[]): T[] {
   return result;
 }
 
-/** 1 correct + up to 2 random decoys from the other tile keys, shuffled. */
 /**
- * 1 correct + up to 2 random decoys. same_artist is excluded from the
- * decoy pool for One Hit Wonders specifically - it can never be the
- * correct answer there (each performer has exactly one song, so there's
- * never a second song to share an artist with), so offering it as a decoy
- * would just be a free giveaway that it's wrong.
+ * 1 correct + up to 2 random decoys, drawn from the tile keys the category
+ * actually allows (see LadderCategoryDef.excludedTileKeys) - a key that can
+ * never be the true connection for this category (e.g. same_artist for One
+ * Hit Wonders, where every performer has exactly one song) would just be a
+ * free giveaway as a decoy, so it's excluded from the pool entirely.
  */
 function pickConnectionChoices(
   rng: () => number,
   correct: LadderTileKey,
   categoryId: LadderCategoryId,
 ): LadderTileKey[] {
-  let decoyPool = LADDER_TILE_KEYS.filter((key) => key !== correct);
-  if (categoryId === "one-hit-wonders") {
-    decoyPool = decoyPool.filter((key) => key !== "same_artist");
-  }
+  const category = categoryById(categoryId);
+  const decoyPool = usableTileKeys(category).filter((key) => key !== correct);
   const decoys = shuffled(rng, decoyPool).slice(0, 2);
   return shuffled(rng, [correct, ...decoys]);
 }
@@ -503,7 +527,7 @@ export class GuidedGameEngine {
     const category = categoryById(this.categoryId);
     const usedIds = new Set(this.usedSongIds());
     const connectedIds = new Set<number>();
-    for (const tileKey of LADDER_TILE_KEYS) {
+    for (const tileKey of usableTileKeys(category)) {
       for (const id of eligibleNeighborIds(previous.id, tileKey, this.dataset, index, category, new Set())) {
         connectedIds.add(id);
       }

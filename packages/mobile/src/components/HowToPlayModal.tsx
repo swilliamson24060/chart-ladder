@@ -93,7 +93,8 @@ export function HowToPlayModal({ visible, onClose, onWatchTutorial }: Props) {
               <Section title="CONNECTION BONUS">
                 <Text style={styles.body}>
                   After choosing the correct tile, name how it connects. You'll see three options - the
-                  correct one plus two random decoys - drawn from five possible connection types:{" "}
+                  correct one plus two random decoys - drawn from {LADDER_TILE_KEYS.length} possible
+                  connection types:{" "}
                   {LADDER_TILE_KEYS.map((key) => LADDER_TILE_LABELS[key]).join(", ")}. A correct answer
                   adds {GUIDED_CONNECTION_BONUS} bonus points.
                 </Text>
