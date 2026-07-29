@@ -119,5 +119,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.5,
+    textAlign: "center",
   },
 });
