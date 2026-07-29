@@ -4,9 +4,11 @@ import {
   Board,
   GuidedPathConnection,
   LADDER_TILE_LABELS,
+  ladderConnectionDetail,
   tileLabel,
   type LadderSongTile,
 } from "@chartcross/engine";
+import { ladderDataset } from "../dataset";
 import { colors, connectionColors } from "../theme";
 
 interface Props {
@@ -33,6 +35,7 @@ export function ConnectionChainModal({ visible, board, connections, onClose }: P
             {connections.map((edge, i) => {
               const fromTile = board[edge.fromRow][edge.fromCol].tile as LadderSongTile;
               const toTile = board[edge.toRow][edge.toCol].tile as LadderSongTile;
+              const detail = ladderConnectionDetail(fromTile, toTile, edge.reason, ladderDataset);
               return (
                 <View key={i} style={styles.row}>
                   <Text style={styles.songs}>
@@ -40,6 +43,7 @@ export function ConnectionChainModal({ visible, board, connections, onClose }: P
                   </Text>
                   <Text style={[styles.reason, { color: connectionColors[edge.reason] }]}>
                     {LADDER_TILE_LABELS[edge.reason]}
+                    {detail ? ` (${detail})` : ""}
                   </Text>
                 </View>
               );

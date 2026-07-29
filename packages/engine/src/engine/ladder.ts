@@ -298,6 +298,48 @@ export function ladderConnectionReason(
   return null;
 }
 
+/**
+ * A short, human-readable detail for a specific connection - e.g. the two
+ * performer credits for a same_artist/band_collab link, the shared peak
+ * position, or the matching genre/award name. Used by UI that lists out a
+ * completed chain (the round-complete chain review, the tutorial's final
+ * summary) so each link shows *what* it actually connects on, not just the
+ * connection type. For same_genre/same_award the underlying group key
+ * (e.g. "pop rock", "Grammy Award for Record of the Year") already reads
+ * fine as-is; the other raw group keys (numeric ids, UUIDs) don't, so
+ * those types are derived from the tiles' own fields instead.
+ */
+export function ladderConnectionDetail(
+  fromTile: LadderSongTile,
+  toTile: LadderSongTile,
+  reason: LadderTileKey,
+  dataset: LadderDataset,
+): string {
+  switch (reason) {
+    case "same_artist":
+      return fromTile.performer === toTile.performer
+        ? fromTile.performer
+        : `${fromTile.performer}; ${toTile.performer}`;
+    case "band_collab":
+      return `${fromTile.performer}; ${toTile.performer}`;
+    case "same_peak_pos":
+      return `#${toTile.peakPos}`;
+    case "weeks_on_chart":
+      return `${fromTile.maxWksOnChart} wks; ${toTile.maxWksOnChart} wks`;
+    case "same_genre":
+    case "same_award": {
+      const index = ladderIndex(dataset);
+      const fromId = Number(fromTile.id);
+      const toId = Number(toTile.id);
+      const groups = index.memberships.get(fromId)?.get(reason) ?? [];
+      for (const { connType, groupKey } of groups) {
+        if ((dataset.connections[connType]?.[groupKey] ?? []).includes(toId)) return groupKey;
+      }
+      return "";
+    }
+  }
+}
+
 function availableTileKeys(
   songId: number,
   dataset: LadderDataset,
