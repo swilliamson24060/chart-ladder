@@ -6,7 +6,7 @@ import {
   GUIDED_PATH_POSITIONS,
   GUIDED_TILE_POINTS,
   GuidedGameEngine,
-  ladderConnectionReason,
+  ladderTileKeysForCategory,
   LADDER_TILE_LABELS,
   tileLabel,
   type GuidedGameState,
@@ -43,13 +43,32 @@ interface StepOutcome {
   scoreAfter: number;
 }
 
-/** The index of the one choice that actually connects to the previous path tile - decoys never do, by construction. */
-function findCorrectChoiceIndex(previousTile: LadderSongTile, choices: LadderSongTile[]): number {
-  for (let i = 0; i < choices.length; i++) {
-    if (ladderConnectionReason(previousTile, choices[i], ladderDataset) !== null) return i;
-  }
-  return -1;
-}
+/** Prose form of each connection type, for reading inside a sentence (LADDER_TILE_LABELS are shouty button captions). */
+const CONNECTION_PHRASES: Record<LadderTileKey, string> = {
+  same_artist: "an artist",
+  band_collab: "a collaboration or band member",
+  same_genre: "a genre",
+  same_award: "an award",
+  top_40: "both being Top 40 hits",
+  outside_top_40: "both missing the Top 40",
+  long_run: "both lasting 3+ months on the chart",
+  short_run: "both lasting under 3 months",
+};
+
+const TUTORIAL_TILE_KEYS = ladderTileKeysForCategory(defaultCategory.id);
+
+/**
+ * The connection types this tutorial's category can actually produce, as a
+ * readable list. Derived from the category rather than hardcoded so the
+ * tutorial never names a connection the player will never see - One Hit
+ * Wonders excludes Same Artist, and "We're Number 1!" excludes Same Peak
+ * Position.
+ */
+const TUTORIAL_CONNECTION_TYPES = (() => {
+  const phrases = TUTORIAL_TILE_KEYS.map((key) => CONNECTION_PHRASES[key]);
+  if (phrases.length <= 1) return phrases[0] ?? "";
+  return `${phrases.slice(0, -1).join(", ")}, or ${phrases[phrases.length - 1]}`;
+})();
 
 function explanationLine(reason: LadderTileKey, previousTile: LadderSongTile, chosenTile: LadderSongTile): string {
   switch (reason) {
@@ -61,12 +80,16 @@ function explanationLine(reason: LadderTileKey, previousTile: LadderSongTile, ch
       return `${previousTile.performer} and ${chosenTile.performer} are linked by a collaboration or shared band member.`;
     case "same_genre":
       return "Both songs share a genre.";
-    case "same_peak_pos":
-      return `Both peaked at #${chosenTile.peakPos} on the Hot 100.`;
     case "same_award":
       return "Both songs won the same award.";
-    case "weeks_on_chart":
-      return "Both songs spent a similar number of weeks on the Hot 100.";
+    case "top_40":
+      return `Both were Top 40 hits (#${previousTile.peakPos} and #${chosenTile.peakPos}).`;
+    case "outside_top_40":
+      return `Neither one cracked the Top 40 (#${previousTile.peakPos} and #${chosenTile.peakPos}).`;
+    case "long_run":
+      return `Both spent 3+ months on the Hot 100 (${previousTile.maxWksOnChart} and ${chosenTile.maxWksOnChart} weeks).`;
+    case "short_run":
+      return `Both spent under 3 months on the Hot 100 (${previousTile.maxWksOnChart} and ${chosenTile.maxWksOnChart} weeks).`;
   }
 }
 
@@ -110,11 +133,12 @@ export function TutorialModal({ visible, onFinish }: Props) {
     }
     const previousTile = tileAt(gameState, gameState.step);
     const choices = gameState.choices as LadderSongTile[];
-    const choiceIndex = findCorrectChoiceIndex(previousTile, choices);
-    // A song pair can connect through more than one tile type at once, so
-    // ask the engine which one the route actually committed to rather than
-    // re-deriving it independently (which could legitimately disagree
-    // while still being "a" valid connection).
+    // Both the correct tile and its connection type come straight from the
+    // engine's route. Re-deriving either from the dataset risks disagreeing
+    // with what the engine will actually score: a pair can connect through
+    // several tile types at once, and a decoy is only guaranteed not to
+    // connect through the types this category permits.
+    const choiceIndex = engine.peekCorrectChoiceIndex();
     const reason = engine.peekCurrentReason();
     if (choiceIndex === -1 || !reason) {
       setPhase("done");
@@ -217,8 +241,8 @@ export function TutorialModal({ visible, onFinish }: Props) {
                 <Text style={styles.explainLine}>
                   Each step gives you three songs. Only one of them connects to{" "}
                   {pending.step === 0 ? "the starter song" : "the previously correct song in the chain"} -
-                  by sharing an artist, a genre, a peak chart position, an award, or a collaboration/band
-                  connection. The other two are decoys that don't connect at all.
+                  by sharing {TUTORIAL_CONNECTION_TYPES}. The other two are decoys that don't connect at
+                  all.
                 </Text>
                 <Text style={styles.explainLine}>
                   Here, "{tileLabel(pending.chosenTile)}" (highlighted below) is the right pick because
@@ -249,8 +273,8 @@ export function TutorialModal({ visible, onFinish }: Props) {
                 <Text style={styles.explainTitle}>NAME THE CONNECTION</Text>
                 <Text style={styles.explainLine}>
                   Once the right tile is placed, you can earn a bonus by naming how it connects. You'll
-                  see three options - the correct one plus two random decoys drawn from five possible
-                  connection types.
+                  see three options - the correct one plus two random decoys drawn from the{" "}
+                  {TUTORIAL_TILE_KEYS.length} connection types this category can use.
                 </Text>
                 <Text style={styles.explainLine}>
                   Here, the connection is {LADDER_TILE_LABELS[pending.reason]} (highlighted below).

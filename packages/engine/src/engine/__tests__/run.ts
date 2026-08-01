@@ -25,7 +25,12 @@ import {
   LADDER_CATEGORIES,
   LADDER_TILE_KEYS,
   ladderConnectionReason,
+  ladderTileKeysForCategory,
+  ladderTrueConnections,
+  LONG_RUN_CUTOFF_WEEKS,
+  TOP_40_CUTOFF,
   type LadderRawData,
+  type LadderTileKey,
 } from "../ladder";
 import {
   ArtistTile,
@@ -1093,10 +1098,20 @@ const topTier = LADDER_CATEGORIES.find((c) => c.id === "top-tier")!;
     state = engine.getState();
     const previousPosition = GUIDED_PATH_POSITIONS[step];
     const previous = state.board[previousPosition.row][previousPosition.col].tile as LadderSongTile;
-    const reasons = state.choices.map((choice) => ladderConnectionReason(previous, choice, ladderDataset));
+    const reasons = state.choices.map((choice) =>
+      ladderConnectionReason(previous, choice, ladderDataset, "top-tier"),
+    );
     const correctIndex = reasons.findIndex((r) => r !== null);
     const validChoices = reasons.filter((r) => r !== null);
     check(`Step ${step + 1} has exactly one connecting choice`, validChoices.length === 1);
+
+    // Every connection that genuinely holds for this pair is now accepted,
+    // so a "wrong" guess has to be one that really is false - picking any
+    // key other than the route's would often be legitimately correct.
+    const trulyFalse = LADDER_TILE_KEYS.filter(
+      (key) =>
+        !ladderTrueConnections(previous, state.choices[correctIndex] as LadderSongTile, ladderDataset, "top-tier").includes(key),
+    );
 
     const choiceResult = engine.chooseTile(correctIndex);
     check(`Step ${step + 1} waits for a connection guess`, choiceResult.needsConnectionGuess);
@@ -1110,13 +1125,14 @@ const topTier = LADDER_CATEGORIES.find((c) => c.id === "top-tier")!;
       `Step ${step + 1} offers three connection choices including the correct one`,
       afterChoice.connectionChoices.length === 3 && afterChoice.connectionChoices.includes(correctReason),
     );
-    const guessedReason =
-      step === 1 ? LADDER_TILE_KEYS.find((reason) => reason !== correctReason)! : correctReason;
+    const guessWrong = step === 1 && trulyFalse.length > 0;
+    const guessedReason = guessWrong ? trulyFalse[0] : correctReason;
     const guessResult = engine.guessConnection(guessedReason);
-    const expected = GUIDED_TILE_POINTS + (step === 1 ? 0 : GUIDED_CONNECTION_BONUS);
+    const expected = GUIDED_TILE_POINTS + (guessWrong ? 0 : GUIDED_CONNECTION_BONUS);
     check(`Step ${step + 1} awards the expected score`, guessResult.pointsAwarded === expected);
-    if (step === 1) {
-      check("Wrong connection guess reveals the correct reason", guessResult.correctReason === correctReason);
+    if (guessWrong) {
+      check("A genuinely false connection guess is rejected", guessResult.correct === false);
+      check("Wrong connection guess reveals the route's reason", guessResult.correctReason === correctReason);
       check("Wrong connection guess does not end the game", guessResult.status === "playing");
     }
   }
@@ -1187,6 +1203,161 @@ const topTier = LADDER_CATEGORIES.find((c) => c.id === "top-tier")!;
   check(
     "One Hit Wonders choices are all eligible for the category",
     state.choices.every((choice) => oneHitWonders.isEligible(ladderDataset.songs[Number(choice.id)], { performerSongCounts })),
+  );
+}
+
+console.log("\nCategory-aware connection reporting (the tutorial's correct-tile lookup):");
+{
+  check(
+    "ladderTileKeysForCategory drops Same Artist for One Hit Wonders",
+    !ladderTileKeysForCategory("one-hit-wonders").includes("same_artist") &&
+      ladderTileKeysForCategory("one-hit-wonders").length === LADDER_TILE_KEYS.length - 1,
+  );
+  check(
+    "ladderTileKeysForCategory drops both chart-tier keys for We're Number 1!",
+    !ladderTileKeysForCategory("number-one-hits").includes("top_40") &&
+      !ladderTileKeysForCategory("number-one-hits").includes("outside_top_40"),
+  );
+  check(
+    "ladderTileKeysForCategory keeps every key for an unrestricted category",
+    ladderTileKeysForCategory("top-tier").length === LADDER_TILE_KEYS.length,
+  );
+
+  // peekCorrectChoiceIndex() is what the tutorial drives itself with, so it
+  // has to agree with what the engine will actually score - across every
+  // category, including the ones with excluded tile keys.
+  let indexMismatches = 0;
+  let decoysReportedAsConnecting = 0;
+  let spuriousWithoutCategory = 0;
+  let stepsChecked = 0;
+
+  for (const category of LADDER_CATEGORIES) {
+    for (let seed = 0; seed < 20; seed++) {
+      const engine = new GuidedGameEngine(ladderDataset, category.id, 4000 + seed);
+      for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
+        const state = engine.getState();
+        const previousPosition = GUIDED_PATH_POSITIONS[step];
+        const previous = state.board[previousPosition.row][previousPosition.col].tile as LadderSongTile;
+        const choices = state.choices as LadderSongTile[];
+        const correctIndex = engine.peekCorrectChoiceIndex();
+        stepsChecked++;
+
+        choices.forEach((choice, i) => {
+          const scoped = ladderConnectionReason(previous, choice, ladderDataset, category.id);
+          if (i !== correctIndex && scoped !== null) decoysReportedAsConnecting++;
+          if (i !== correctIndex && ladderConnectionReason(previous, choice, ladderDataset) !== null) {
+            spuriousWithoutCategory++;
+          }
+        });
+
+        const outcome = engine.chooseTile(correctIndex);
+        if (!outcome.correct) indexMismatches++;
+        engine.guessConnection(engine.peekCurrentReason()!);
+      }
+    }
+  }
+
+  console.log(`  (info) checked ${stepsChecked} steps across all categories`);
+  check("peekCorrectChoiceIndex always names the tile the engine scores as correct", indexMismatches === 0);
+  check(
+    "A category-scoped ladderConnectionReason never reports a decoy as connecting",
+    decoysReportedAsConnecting === 0,
+  );
+  // The whole reason the categoryId argument exists: without it, every pair
+  // of "We're Number 1!" songs trivially shares a peak position, so an
+  // unscoped check reports decoys as connecting and would have led the
+  // tutorial to highlight the wrong tile.
+  check(
+    "Without a category, ladderConnectionReason does report decoys as connecting (why the argument exists)",
+    spuriousWithoutCategory > 0,
+  );
+}
+
+console.log("\nChart-tier connections and accept-any-true scoring:");
+{
+  // The tier keys are exact properties of the pair, so they must hold
+  // regardless of whether the generator sampled that pair into a group.
+  const tierChecks: Array<[LadderTileKey, number, number, number, number, boolean]> = [
+    // key, peakA, wksA, peakB, wksB, expected
+    ["top_40", 1, 20, TOP_40_CUTOFF, 5, true],
+    ["top_40", 1, 20, TOP_40_CUTOFF + 1, 5, false],
+    ["outside_top_40", TOP_40_CUTOFF + 1, 4, 99, 2, true],
+    ["outside_top_40", TOP_40_CUTOFF, 4, 99, 2, false],
+    ["long_run", 50, LONG_RUN_CUTOFF_WEEKS, 60, 40, true],
+    ["long_run", 50, LONG_RUN_CUTOFF_WEEKS - 1, 60, 40, false],
+    ["short_run", 50, LONG_RUN_CUTOFF_WEEKS - 1, 60, 1, true],
+    ["short_run", 50, LONG_RUN_CUTOFF_WEEKS, 60, 1, false],
+  ];
+  const asTile = (id: string, peakPos: number, maxWksOnChart: number): LadderSongTile => ({
+    kind: "LADDER_SONG", id, title: id, performer: id, peakPos, maxWksOnChart,
+  });
+  let tierFailures = 0;
+  for (const [key, peakA, wksA, peakB, wksB, expected] of tierChecks) {
+    // Ids far outside the dataset so no real group membership can interfere.
+    const a = asTile("999901", peakA, wksA);
+    const b = asTile("999902", peakB, wksB);
+    if (ladderTrueConnections(a, b, ladderDataset, "top-tier").includes(key) !== expected) tierFailures++;
+  }
+  check("Chart-tier connections evaluate exactly from peak position and weeks", tierFailures === 0);
+  check(
+    "Top 40 and Outside Top 40 are mutually exclusive",
+    !ladderTrueConnections(asTile("999901", 5, 30), asTile("999902", 80, 30), ladderDataset, "top-tier")
+      .some((k) => k === "top_40" || k === "outside_top_40"),
+  );
+
+  // Every offered choice that genuinely holds must score; every one that
+  // doesn't must not. This is the fairness property the change exists for.
+  let acceptedWrongly = 0;
+  let rejectedWrongly = 0;
+  let stepsWithMultipleTruths = 0;
+  let stepsWithMultipleOffered = 0;
+  let steps = 0;
+
+  for (const category of LADDER_CATEGORIES) {
+    for (let seed = 0; seed < 15; seed++) {
+      const engine = new GuidedGameEngine(ladderDataset, category.id, 8000 + seed);
+      for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
+        const before = engine.getState();
+        const previousPosition = GUIDED_PATH_POSITIONS[step];
+        const previous = before.board[previousPosition.row][previousPosition.col].tile as LadderSongTile;
+        const correctIndex = engine.peekCorrectChoiceIndex();
+        const chosen = before.choices[correctIndex] as LadderSongTile;
+        const truths = ladderTrueConnections(previous, chosen, ladderDataset, category.id);
+        if (truths.length > 1) stepsWithMultipleTruths++;
+
+        engine.chooseTile(correctIndex);
+        const offered = engine.getState().connectionChoices;
+        if (offered.filter((k) => truths.includes(k)).length > 1) stepsWithMultipleOffered++;
+
+        // Replay the same step for each offered option to see how it scores.
+        for (const option of offered) {
+          const replay = new GuidedGameEngine(ladderDataset, category.id, 8000 + seed);
+          for (let s = 0; s < step; s++) {
+            replay.chooseTile(replay.peekCorrectChoiceIndex());
+            replay.guessConnection(replay.peekCurrentReason()!);
+          }
+          replay.chooseTile(replay.peekCorrectChoiceIndex());
+          const outcome = replay.guessConnection(option);
+          const shouldBeCorrect = truths.includes(option);
+          if (outcome.correct && !shouldBeCorrect) acceptedWrongly++;
+          if (!outcome.correct && shouldBeCorrect) rejectedWrongly++;
+        }
+        engine.guessConnection(engine.peekCurrentReason()!);
+        steps++;
+      }
+    }
+  }
+
+  console.log(
+    `  (info) ${steps} steps; ${stepsWithMultipleTruths} had more than one true connection, ` +
+      `${stepsWithMultipleOffered} offered more than one true option`,
+  );
+  check("Every genuinely true connection offered is scored as correct", rejectedWrongly === 0);
+  check("No genuinely false connection is scored as correct", acceptedWrongly === 0);
+  check("Multi-truth pairs do occur, so the rule is actually exercised", stepsWithMultipleTruths > 0);
+  check(
+    "Decoy filtering keeps a single correct option in nearly every step",
+    stepsWithMultipleOffered / Math.max(1, steps) < 0.05,
   );
 }
 

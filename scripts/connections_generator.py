@@ -65,6 +65,92 @@ def add(groups, key, value, song_id):
     groups[key][value].add(song_id)
 
 
+# Chart-tier thresholds. These two traits are deliberately coarse and
+# binary: a player can plausibly recall whether a song was a Top 40 hit or
+# whether it hung around for a season, but never that two songs both peaked
+# at exactly #63 or both ran 20-29 weeks.
+TOP_40_CUTOFF = 40
+LONG_RUN_CUTOFF_WEEKS = 13  # ~3 months
+
+
+# --- fame scoring ---------------------------------------------------------
+#
+# A 0-100 "would a player plausibly recognise this song" score, used by the
+# game to keep a round's songs inside a recognisability band instead of
+# drawing uniformly from 30k+ Hot 100 entries (most of which peaked in the
+# 70s for three weeks in 1974 and are unknowable to anyone). Nothing about
+# this score is ever shown to the player - it only shapes which songs get
+# drawn, so the puzzle stays a reasoning exercise rather than becoming a
+# spot-the-number exercise.
+FAME_WEIGHT_PEAK = 0.45        # how high it charted
+FAME_WEIGHT_WEEKS = 0.35       # how long it stuck around
+FAME_WEIGHT_DURABILITY = 0.15  # charted across multiple calendar years (re-entries, perennials)
+FAME_WEIGHT_AWARD = 0.05       # has a Wikidata award
+# Distinct chart years at which the durability term saturates. 3 -> a song
+# charting in 3+ separate years gets full marks for endurance.
+FAME_DURABILITY_YEARS = 3
+
+
+def percentile_ranks(values):
+    """Map each value to its 0..1 rank within `values`, higher value ->
+    higher rank. Ties share the midpoint of their block, so the result
+    doesn't depend on input ordering (peak position and weeks-on-chart are
+    small integers with enormous tie blocks - ordinal ranking would break
+    those ties arbitrarily and make the score unstable across runs)."""
+    n = len(values)
+    if n == 0:
+        return []
+    if n == 1:
+        return [1.0]
+    order = sorted(range(n), key=lambda i: values[i])
+    ranks = [0.0] * n
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and values[order[j + 1]] == values[order[i]]:
+            j += 1
+        rank = ((i + j) / 2) / (n - 1)
+        for k in range(i, j + 1):
+            ranks[order[k]] = rank
+        i = j + 1
+    return ranks
+
+
+def compute_fame(songs):
+    """song_id -> 0-100 fame score, percentile-normalised *within each debut
+    decade*.
+
+    Normalising per-decade is essential, not cosmetic: Billboard's chart
+    rules changed enormously over 70 years, so raw weeks-on-chart is not
+    comparable across eras (median run is ~7 weeks for a 1960s song, ~17 for
+    a 2000s one, and ~2 for a 2020s one under streaming-era churn). Scoring
+    on absolute values would flood the game with 90s/00s songs and all but
+    erase the 2020s. Ranking each song against its own decade's cohort keeps
+    every era represented by its own most-recognisable material."""
+    by_decade = defaultdict(list)
+    for song_id, s in songs.items():
+        year = s["first_year"]
+        by_decade[(year // 10) * 10 if year is not None else None].append(song_id)
+
+    fame = {}
+    for _decade, ids in by_decade.items():
+        # Negated so that "higher is better" holds for both terms: peak_pos
+        # 1 is the best chart position, and a missing peak sorts last.
+        peak_ranks = percentile_ranks([-(songs[i]["peak_pos"] or 101) for i in ids])
+        week_ranks = percentile_ranks([songs[i]["max_wks_on_chart"] for i in ids])
+        for i, peak_rank, week_rank in zip(ids, peak_ranks, week_ranks):
+            s = songs[i]
+            durability = min(1.0, (len(s["chart_years"]) - 1) / max(1, FAME_DURABILITY_YEARS - 1))
+            score = (
+                FAME_WEIGHT_PEAK * peak_rank
+                + FAME_WEIGHT_WEEKS * week_rank
+                + FAME_WEIGHT_DURABILITY * durability
+                + FAME_WEIGHT_AWARD * (1.0 if s["has_award"] else 0.0)
+            )
+            fame[i] = round(100 * score, 1)
+    return fame
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", required=True)
@@ -101,6 +187,10 @@ def main():
                     "peak_pos": None,
                     "max_wks_on_chart": 0,
                     "first_chart_week": row.get("chart_week"),
+                    # fame inputs (see compute_fame)
+                    "first_year": None,
+                    "chart_years": set(),
+                    "has_award": False,
                 }
                 song_by_title_perf[(normalize_title(title), performer)] = song_id
                 performer_titles[performer].add(song_id)
@@ -118,12 +208,24 @@ def main():
                     s["max_wks_on_chart"] = wks
             except (ValueError, KeyError):
                 pass
+            try:
+                year = int(row["year"])
+                s["chart_years"].add(year)
+                if s["first_year"] is None or year < s["first_year"]:
+                    s["first_year"] = year
+            except (ValueError, KeyError, TypeError):
+                pass
+            if row.get("wd_awards"):
+                s["has_award"] = True
 
             # --- CSV-only connections ---
             add(groups, "same_performer", performer, song_id)
             add(groups, "same_title", normalize_title(title), song_id)
-            if s["peak_pos"] is not None:
-                add(groups, "same_peak_position", str(s["peak_pos"]), song_id)
+            # NB: chart tier and chart run are deliberately NOT computed
+            # here. Both depend on the song's *final* peak/week totals, and
+            # inside this loop those are only the running values seen so far
+            # - a song that debuts at #80 and climbs to #2 would be filed
+            # under both tiers. They're derived after the read loop instead.
 
             collab_names = split_performers(performer)
             if len(collab_names) > 1:
@@ -163,22 +265,22 @@ def main():
                 if mbid:
                     add(groups, "same_artist_identity", mbid, song_id)  # catches name variants of the same act
 
-    # chart longevity buckets (not exact-match; bucketed so it's a meaningful shared trait)
-    longevity_buckets = defaultdict(set)
+    # Chart tier and chart run, both derived once per song from its final
+    # totals so each song lands in exactly one group of each pair.
+    #
+    # Tier replaces exact peak position: "both peaked at #63" is a
+    # coincidence no player can reason about, whereas "both were Top 40
+    # hits" is a fact about a song someone might actually know. Run length
+    # replaces the old five-way week buckets, which asked players to tell a
+    # 20-29 week run from a 30-49 week one. Each is two mutually exclusive
+    # connection types rather than one type with two groups, so the tile the
+    # player picks names which side it is.
     for song_id, s in songs.items():
-        w = s["max_wks_on_chart"]
-        if w >= 50:
-            bucket = "50+ weeks"
-        elif w >= 30:
-            bucket = "30-49 weeks"
-        elif w >= 20:
-            bucket = "20-29 weeks"
-        elif w >= 10:
-            bucket = "10-19 weeks"
-        else:
-            continue  # short runs aren't a distinctive shared trait
-        longevity_buckets[bucket].add(song_id)
-    groups["chart_longevity"] = longevity_buckets
+        if s["peak_pos"] is not None:
+            tier = "top_40" if s["peak_pos"] <= TOP_40_CUTOFF else "outside_top_40"
+            add(groups, tier, tier, song_id)
+        run = "long_run" if s["max_wks_on_chart"] >= LONG_RUN_CUTOFF_WEEKS else "short_run"
+        add(groups, run, run, song_id)
 
     # shared title words (only for titles that aren't exact matches -- that's same_title's job)
     word_groups = defaultdict(set)
@@ -206,11 +308,16 @@ def main():
     ordered_song_ids = sorted(referenced)  # stable order -> stable IDs across runs
     id_index = {sid: i for i, sid in enumerate(ordered_song_ids)}
 
+    # Fame is ranked across every song in the CSV, not just the referenced
+    # subset, so a song's score doesn't shift depending on which connection
+    # types happened to survive the min-group-size filter.
+    fame = compute_fame(songs)
+
     songs_array = []
     for sid in ordered_song_ids:
         s = songs[sid]
-        songs_array.append([s["title"], s["performer"], s["peak_pos"], s["max_wks_on_chart"]])
-    # songs_array columns, in order: [title, performer, peak_pos, max_wks_on_chart]
+        songs_array.append([s["title"], s["performer"], s["peak_pos"], s["max_wks_on_chart"], fame[sid]])
+    # songs_array columns, in order: [title, performer, peak_pos, max_wks_on_chart, fame]
 
     # finalize: drop groups below min size, cap oversized groups, remap to int IDs
     final = {}
@@ -237,7 +344,7 @@ def main():
             }
 
     result = {
-        "song_fields": ["title", "performer", "peak_pos", "max_wks_on_chart"],
+        "song_fields": ["title", "performer", "peak_pos", "max_wks_on_chart", "fame"],
         "songs": songs_array,
         "connections": final,
     }
@@ -262,6 +369,12 @@ def main():
     print(f"{'connection_type':<24}{'groups':>8}{'songs covered':>16}{'avg size':>10}{'max size':>10}")
     for conn_type, s in sorted(stats.items(), key=lambda x: -x[1]["total_songs_involved"]):
         print(f"{conn_type:<24}{s['num_groups']:>8}{s['total_songs_involved']:>16}{s['avg_group_size']:>10}{s['largest_group']:>10}")
+
+    emitted_fame = sorted((fame[sid] for sid in ordered_song_ids), reverse=True)
+    print(f"\n{'fame floor':<14}{'songs above':>13}{'% of pool':>11}")
+    for floor in (80, 70, 60, 50, 0):
+        above = sum(1 for f in emitted_fame if f >= floor)
+        print(f"{floor:<14}{above:>13}{100 * above / max(1, len(emitted_fame)):>10.1f}%")
 
     if not has_wikidata:
         print("\nNote: no wd_* columns found -- this ran CSV-only connections. "
