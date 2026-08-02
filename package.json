@@ -6,6 +6,9 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "node scripts/decompress-connections.mjs"
+    "postinstall": "node scripts/decompress-connections.mjs",
+    "start": "npm start -w @chartcross/mobile",
+    "web": "npm run web -w @chartcross/mobile",
+    "test": "npm test -w @chartcross/engine"
   }
 }

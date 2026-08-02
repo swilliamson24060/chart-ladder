@@ -10,11 +10,13 @@ import {
   View,
 } from "react-native";
 import {
-  GUIDED_CONNECTION_BONUS,
   GUIDED_PATH_LENGTH,
-  GUIDED_TILE_POINTS,
   LADDER_TILE_LABELS,
   LADDER_TILE_KEYS,
+  PUZZLE_BANK_SIZE,
+  PUZZLE_CONNECTION_BONUS,
+  PUZZLE_MISTAKE_ALLOWANCE,
+  PUZZLE_TILE_POINTS,
 } from "@chartcross/engine";
 import { colors } from "../theme";
 
@@ -75,52 +77,46 @@ export function HowToPlayModal({ visible, onClose, onWatchTutorial }: Props) {
               }}
               scrollEventThrottle={32}
             >
-              <Section title="BUILD THE PATH">
+              <Section title="BUILD THE LADDER">
                 <Text style={styles.body}>
-                  Connect the START song to the ANCHOR song by finding all {GUIDED_PATH_LENGTH} songs
-                  in the prepared chain. Correct songs are placed on the board automatically. Tap any
-                  song already on the board any time to see its full details.
+                  START and ANCHOR are already on the board. Between them sit {GUIDED_PATH_LENGTH} empty
+                  rungs, and below them a bank of {PUZZLE_BANK_SIZE} songs - the {GUIDED_PATH_LENGTH} that
+                  belong, plus {PUZZLE_BANK_SIZE - GUIDED_PATH_LENGTH} that connect to nothing at all.
                 </Text>
               </Section>
 
-              <Section title="CHOOSE A TILE">
+              <Section title="WORK IN FROM BOTH ENDS">
                 <Text style={styles.body}>
-                  Each step presents three songs from your selected category. Exactly one connects to
-                  the last song on the path. A correct choice earns {GUIDED_TILE_POINTS} points.
+                  A rung only opens once the rung beside it is filled, so you start at the two ends and
+                  meet in the middle. Tap a song, then tap a glowing rung to place it. Each correct
+                  placement is worth {PUZZLE_TILE_POINTS} points and opens the next rung along.
+                </Text>
+                <Text style={styles.body}>
+                  Because you can see every candidate at once, you can place the ones you're sure of
+                  first and let the rest narrow down.
                 </Text>
               </Section>
 
-              <Section title="CONNECTION BONUS">
+              <Section title="NAME THE CONNECTION">
                 <Text style={styles.body}>
-                  After choosing the correct tile, name how it connects. You'll see three options - the
-                  correct one plus two random decoys - drawn from {LADDER_TILE_KEYS.length} possible
-                  connection types:{" "}
-                  {LADDER_TILE_KEYS.map((key) => LADDER_TILE_LABELS[key]).join(", ")}. A correct answer
-                  adds {GUIDED_CONNECTION_BONUS} bonus points.
-                </Text>
-                <Text style={styles.body}>
-                  A wrong connection answer reveals the correct answer and forfeits only the bonus.
-                  Your correct tile still earns its base points, and the path continues.
+                  After each placement, say how the two songs link for a {PUZZLE_CONNECTION_BONUS}-point
+                  bonus. The {LADDER_TILE_KEYS.length} connection types are:{" "}
+                  {LADDER_TILE_KEYS.map((key) => LADDER_TILE_LABELS[key]).join(", ")}. Any answer that is
+                  genuinely true counts, not just the one the puzzle had in mind.
                 </Text>
               </Section>
 
-              <Section title="REVIEW THE CHAIN">
+              <Section title="MISTAKES">
                 <Text style={styles.body}>
-                  After completing a path, tap 🔗 VIEW CONNECTION CHAIN to review every song and how it
-                  connects to the next, start to finish.
+                  A wrong placement costs one of your {PUZZLE_MISTAKE_ALLOWANCE} mistakes and leaves the
+                  song in the bank. They're shared across the whole ladder, so spend them where you like.
+                  Run out and the ladder ends.
+                </Text>
+                <Text style={styles.body}>
+                  Tap any song already on the board to see its full details.
                 </Text>
               </Section>
 
-              <Section title="FINISH">
-                <Text style={styles.body}>
-                  A wrong song choice earns 0 base points, but the correct tile is placed and you may
-                  still try for the connection bonus. The session ends after five tile misses.
-                </Text>
-                <Text style={styles.body}>
-                  Complete all {GUIDED_PATH_LENGTH} steps to finish a path. You can add another round
-                  to the same score, end and submit, or save at the completed path and resume later.
-                </Text>
-              </Section>
             </ScrollView>
             {canScrollMore && (
               <View style={styles.scrollHint} pointerEvents="none">

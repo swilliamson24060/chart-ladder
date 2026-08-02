@@ -7,8 +7,10 @@
   "types": "src/engine/index.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsx src/engine/__tests__/run.ts && tsx src/engine/__tests__/fame.ts",
-    "test:fame": "tsx src/engine/__tests__/fame.ts"
+    "test": "tsx src/engine/__tests__/run.ts && tsx src/engine/__tests__/fame.ts && tsx src/engine/__tests__/puzzle.ts",
+    "test:fame": "tsx src/engine/__tests__/fame.ts",
+    "test:puzzle": "tsx src/engine/__tests__/puzzle.ts",
+    "bench:fame": "tsx src/engine/__tests__/bench-fame.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

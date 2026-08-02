@@ -13,10 +13,13 @@ import {
   GRID_SIZE,
   GUIDED_PATH_LENGTH,
   GUIDED_PATH_POSITIONS,
-  GuidedGameEngine,
   LADDER_TILE_LABELS,
+  PUZZLE_CONNECTION_BONUS,
+  PUZZLE_MISTAKE_ALLOWANCE,
+  createPuzzleWithRetry,
+  ladderLeaderboardKey,
   type LadderTileKey,
-  type GuidedSessionProgress,
+  type PuzzleSessionProgress,
 } from "@chartcross/engine";
 import { BOARD_RENDER_COLS } from "./src/boardLayout";
 import {
@@ -25,15 +28,14 @@ import {
   ladderDataset,
   type GameCategory,
 } from "./src/dataset";
-import { colors } from "./src/theme";
+import { colors, connectionColors, connectorDim } from "./src/theme";
 import { BoardGrid } from "./src/components/BoardGrid";
 import { CategorySelectModal } from "./src/components/CategorySelectModal";
 import { ConnectionChainModal } from "./src/components/ConnectionChainModal";
-import { GuidedChoices } from "./src/components/GuidedChoices";
 import { GuidedGameOverModal } from "./src/components/GuidedGameOverModal";
 import { HowToPlayModal } from "./src/components/HowToPlayModal";
 import { LeaderboardModal } from "./src/components/LeaderboardModal";
-import { MissedTileModal } from "./src/components/MissedTileModal";
+import { PuzzleBank } from "./src/components/PuzzleBank";
 import { RoundCompleteModal } from "./src/components/RoundCompleteModal";
 import { TileInfoModal } from "./src/components/TileInfoModal";
 import { TutorialModal } from "./src/components/TutorialModal";
@@ -44,13 +46,18 @@ import {
   type SavedGuidedGame,
 } from "./src/savedGame";
 
-function newEngine(category: GameCategory, levelNumber: number, progress?: GuidedSessionProgress) {
-  return new GuidedGameEngine(ladderDataset, category.id, Date.now() + levelNumber, progress);
+/**
+ * Route building is a randomised search, so even a well-stocked category
+ * occasionally draws a starter it can't chain from. Retry with fresh seeds
+ * rather than surfacing that to the player as a crash.
+ */
+function newEngine(category: GameCategory, levelNumber: number, progress?: PuzzleSessionProgress) {
+  return createPuzzleWithRetry(ladderDataset, category.id, Date.now() + levelNumber, undefined, progress);
 }
 
 const HEADER_HEIGHT = 52;
 const SUBHEADER_HEIGHT = 44;
-const CHOICES_RESERVED_HEIGHT = 145;
+const BANK_RESERVED_HEIGHT = 170;
 const TOAST_MIN_HEIGHT = 28;
 const BOARD_GAP = 8;
 const CONTENT_VERTICAL_PADDING = 8;
@@ -64,6 +71,7 @@ export default function App() {
   const activeCategory = selectedCategory ?? defaultCategory;
   const engineRef = useRef(newEngine(defaultCategory, levelNumber));
   const [gameState, setGameState] = useState(() => engineRef.current.getState());
+  const [selectedTile, setSelectedTile] = useState<number | null>(null);
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [infoCell, setInfoCell] = useState<Cell | null>(null);
   const [showHowToPlay, setShowHowToPlay] = useState(true);
@@ -72,7 +80,6 @@ export default function App() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState(0);
   const [savedGame, setSavedGame] = useState<SavedGuidedGame | null>(null);
-  const [showMissDialog, setShowMissDialog] = useState(false);
   const [showChainModal, setShowChainModal] = useState(false);
 
   useEffect(() => {
@@ -81,12 +88,9 @@ export default function App() {
 
   const chromeHeight = (Platform.OS === "web" ? 8 : 48) + HEADER_HEIGHT + SUBHEADER_HEIGHT;
   const reservedHeight =
-    chromeHeight + CHOICES_RESERVED_HEIGHT + TOAST_MIN_HEIGHT + BOARD_GAP + CONTENT_VERTICAL_PADDING;
+    chromeHeight + BANK_RESERVED_HEIGHT + TOAST_MIN_HEIGHT + BOARD_GAP + CONTENT_VERTICAL_PADDING;
   const availableBoardWidth = Math.max(0, width - 24);
   const availableBoardHeight = Math.max(0, height - reservedHeight);
-  // Tiles are twice as wide as they are tall, so the board's pixel budget is
-  // spent across BOARD_RENDER_COLS (one wider than GRID_SIZE) horizontally
-  // but only GRID_SIZE vertically.
   const cellSize = Math.max(
     MIN_CELL_SIZE,
     Math.floor(
@@ -107,61 +111,64 @@ export default function App() {
     setTimeout(() => setToast((current) => (current?.text === text ? null : current)), 2800);
   }
 
-  function handleChooseTile(index: number) {
-    const result = engineRef.current.chooseTile(index);
-    refresh();
-    if (result.status === "game-over") {
-      clearSavedGame().catch(() => undefined);
-      setSavedGame(null);
-    }
-    if (result.missed) {
-      setShowMissDialog(true);
+  /**
+   * Board cells serve two purposes: an open rung is a drop target for the
+   * selected bank tile, and any placed tile opens its details. Tapping an
+   * open rung with nothing selected is a no-op with a nudge rather than an
+   * error, since it's the most likely first thing a player tries.
+   */
+  function handleCellPress(row: number, col: number) {
+    const rung = GUIDED_PATH_POSITIONS.findIndex(
+      (position) => position.row === row && position.col === col,
+    );
+    const isOpenRung = rung >= 0 && gameState.openRungs.includes(rung);
+
+    if (isOpenRung && !gameState.awaitingConnectionGuess) {
+      if (selectedTile === null) {
+        showToast("Pick a song below first, then tap a glowing rung.");
+        return;
+      }
+      const result = engineRef.current.placeTile(selectedTile, rung);
+      setSelectedTile(null);
+      refresh();
+      if (!result.legal) {
+        showToast(result.reason ?? "That move isn't allowed.", true);
+        return;
+      }
+      if (result.correct) {
+        showToast(`Correct — +${result.pointsAwarded}. Now name the connection.`);
+      } else if (result.status === "failed") {
+        clearSavedGame().catch(() => undefined);
+        setSavedGame(null);
+      } else {
+        showToast(`Not that one. ${result.mistakesRemaining} mistakes left.`, true);
+      }
       return;
     }
-    if (result.needsConnectionGuess) {
-      showToast("Correct tile! Name the connection for a 10-point bonus.");
-    } else {
-      showToast(`Correct! +${result.pointsAwarded} points including tile value. Hint bonus forfeited.`);
-    }
+
+    const cell = gameState.board[row][col];
+    if (cell.tile) setInfoCell(cell);
+  }
+
+  function handleSelectTile(index: number) {
+    setSelectedTile((current) => (current === index ? null : index));
   }
 
   function handleGuessConnection(reason: LadderTileKey) {
-    const followedTileMiss = gameState.missedCorrectTile !== null;
     const result = engineRef.current.guessConnection(reason);
     refresh();
     if (result.correct) {
-      showToast(
-        followedTileMiss
-          ? `Correct bonus! +${result.pointsAwarded} points.`
-          : `Correct connection! +${result.pointsAwarded} points including tile value.`,
-      );
+      showToast(`Right — +${result.pointsAwarded} bonus.`);
     } else {
-      showToast(
-        `Wrong connection. The answer was ${LADDER_TILE_LABELS[result.correctReason]}. +${result.pointsAwarded} tile points.`,
-        true,
-      );
+      showToast(`It was ${LADDER_TILE_LABELS[result.correctReason]}. No bonus.`, true);
     }
   }
 
-  function handleViewChain() {
-    setShowChainModal(true);
-  }
-
-  function handleCloseChain() {
+  function resetViewState() {
+    setSelectedTile(null);
+    setToast(null);
+    setInfoCell(null);
     setShowChainModal(false);
-  }
-
-  function handleCellPress(row: number, col: number) {
-    const lockedIndex = gameState.awaitingConnectionGuess
-      ? Math.min(gameState.step + 1, GUIDED_PATH_LENGTH)
-      : Math.min(gameState.step, GUIDED_PATH_LENGTH);
-    const lockedPosition = GUIDED_PATH_POSITIONS[lockedIndex];
-    if (row === lockedPosition.row && col === lockedPosition.col) {
-      showToast("Details for the current path tile stay hidden until it is no longer the newest tile.", true);
-      return;
-    }
-    const cell = gameState.board[row][col];
-    if (cell.tile) setInfoCell(cell);
   }
 
   function handleRestart() {
@@ -170,11 +177,18 @@ export default function App() {
     engineRef.current = newEngine(activeCategory, next);
     clearSavedGame().catch(() => undefined);
     setSavedGame(null);
-    setToast(null);
-    setShowMissDialog(false);
-    setShowChainModal(false);
-    setInfoCell(null);
+    resetViewState();
     refresh();
+  }
+
+  /**
+   * Bail out of the current ladder. Progress in the unfinished round is
+   * lost, but the session score earned from rounds already solved is kept -
+   * abandoning one puzzle shouldn't wipe a good run.
+   */
+  function handleAbandonRound() {
+    resetViewState();
+    setShowCategorySelect(true);
   }
 
   function handleCloseHowToPlay() {
@@ -198,26 +212,20 @@ export default function App() {
     engineRef.current = newEngine(category, 1);
     clearSavedGame().catch(() => undefined);
     setSavedGame(null);
-    setToast(null);
-    setShowMissDialog(false);
-    setShowChainModal(false);
-    setInfoCell(null);
+    resetViewState();
     setShowCategorySelect(false);
     refresh();
   }
 
   function handleContinueRound() {
     engineRef.current.startNextRound();
-    setToast(null);
-    setInfoCell(null);
-    setShowMissDialog(false);
-    setShowChainModal(false);
+    resetViewState();
     refresh();
   }
 
   async function handleSaveAndExit() {
     const saved: SavedGuidedGame = {
-      version: 1,
+      version: 3,
       categoryId: activeCategory.id,
       progress: engineRef.current.getProgress(),
     };
@@ -248,6 +256,23 @@ export default function App() {
     refresh();
   }
 
+  const savedCategory = savedGame
+    ? GAME_CATEGORIES.find((category) => category.id === savedGame.categoryId)
+    : undefined;
+  // genreLabel already reads "Pop & Country" where a rule pools genres, so
+  // the header says what's actually in the deck rather than just what was
+  // tapped on the genre screen.
+  const activeGenreName = activeCategory.genreLabel ?? "All genres";
+  const activeBoard = ladderLeaderboardKey(activeCategory);
+  const placedCount = gameState.bank.filter((entry) => entry.placedAt !== null).length;
+  const openRungCells = new Set(
+    gameState.openRungs.map((rung) => {
+      const position = GUIDED_PATH_POSITIONS[rung];
+      return `${position.row},${position.col}`;
+    }),
+  );
+  const isOver = gameState.status === "failed" || gameState.status === "session-over";
+
   return (
     <View style={styles.app}>
       <StatusBar style="light" />
@@ -268,14 +293,20 @@ export default function App() {
       </View>
 
       <View style={styles.subheader}>
-        <Text style={styles.levelText}>{activeCategory.name.toUpperCase()}</Text>
+        <Pressable style={styles.levelWrap} onPress={handleAbandonRound} hitSlop={6}>
+          <Text style={styles.levelText} numberOfLines={1}>
+            {activeGenreName.toUpperCase()} · {activeCategory.name.toUpperCase()}
+          </Text>
+          <Text style={styles.changeText}>CHANGE ›</Text>
+        </Pressable>
         <Text style={styles.stepText}>
-          ROUND {gameState.roundsCompleted + (gameState.status === "path-complete" ? 0 : 1)} · STEP{" "}
-          {Math.min(gameState.step + 1, GUIDED_PATH_LENGTH)}/{GUIDED_PATH_LENGTH}
+          {placedCount}/{GUIDED_PATH_LENGTH} RUNGS
         </Text>
         <View style={styles.scoreWrap}>
           <Text style={styles.scoreText}>SCORE: {gameState.score.toLocaleString()}</Text>
-          <Text style={styles.missText}>MISSES: {gameState.misses}/5</Text>
+          <Text style={styles.missText}>
+            {gameState.mistakesRemaining}/{PUZZLE_MISTAKE_ALLOWANCE} MISTAKES LEFT
+          </Text>
         </View>
       </View>
 
@@ -284,7 +315,7 @@ export default function App() {
           <BoardGrid
             board={gameState.board}
             cellSize={cellSize}
-            highlightCells={new Set()}
+            highlightCells={gameState.awaitingConnectionGuess ? new Set() : openRungCells}
             onCellPress={handleCellPress}
             pathConnections={gameState.completedConnections}
           />
@@ -294,84 +325,105 @@ export default function App() {
           {toast ? (
             <Text style={[styles.toast, toast.error && styles.toastError]}>{toast.text}</Text>
           ) : (
-            <Text style={styles.boardHint}>💡 Tap a placed tile to see its details</Text>
+            <Text style={styles.boardHint}>
+              {gameState.awaitingConnectionGuess
+                ? "How do these two connect?"
+                : selectedTile === null
+                  ? "Pick a song, then tap a glowing rung"
+                  : "Now tap a glowing rung"}
+            </Text>
           )}
         </View>
 
-        {gameState.status === "playing" && (
-          <GuidedChoices
-            choices={gameState.choices}
-            connectionChoices={gameState.connectionChoices}
-            step={gameState.step}
-            awaitingConnectionGuess={gameState.awaitingConnectionGuess}
-            tileSize={cellSize - 4}
-            onChooseTile={handleChooseTile}
-            onGuessConnection={handleGuessConnection}
+        {gameState.status === "playing" && gameState.awaitingConnectionGuess && (
+          <View style={styles.connectionWrap}>
+            <Text style={styles.connectionHeading}>
+              NAME THE CONNECTION · +{PUZZLE_CONNECTION_BONUS}
+            </Text>
+            <View style={styles.connectionRow}>
+              {gameState.connectionChoices.map((reason) => (
+                <Pressable
+                  key={reason}
+                  onPress={() => handleGuessConnection(reason)}
+                  style={[
+                    styles.connectionChip,
+                    {
+                      borderColor: connectionColors[reason],
+                      backgroundColor: connectorDim[reason],
+                    },
+                  ]}
+                >
+                  <Text style={[styles.connectionText, { color: connectionColors[reason] }]}>
+                    {LADDER_TILE_LABELS[reason]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {gameState.status === "playing" && !gameState.awaitingConnectionGuess && (
+          <PuzzleBank
+            bank={gameState.bank}
+            selectedIndex={selectedTile}
+            disabled={false}
+            tileSize={Math.min(120, (Math.min(width, MAX_BOARD_WIDTH) - 60) / 3)}
+            onSelect={handleSelectTile}
           />
         )}
       </View>
 
       <TileInfoModal cell={infoCell} board={gameState.board} onClose={() => setInfoCell(null)} />
       <GuidedGameOverModal
-        status={showMissDialog ? "playing" : gameState.status}
+        status={isOver ? "game-over" : "playing"}
+        board={activeBoard}
         finalScore={gameState.score}
-        misses={gameState.misses}
+        misses={PUZZLE_MISTAKE_ALLOWANCE - gameState.mistakesRemaining}
         roundsCompleted={gameState.roundsCompleted}
-        correctTile={gameState.missedCorrectTile}
+        correctTile={null}
         onRestart={handleRestart}
         onScoreSubmitted={() => setLeaderboardRefreshKey((key) => key + 1)}
       />
-      <MissedTileModal
-        visible={showMissDialog}
-        correctTile={gameState.missedCorrectTile}
-        misses={gameState.misses}
-        canTryBonus={gameState.awaitingConnectionGuess}
-        gameOver={gameState.status === "game-over"}
-        onContinue={() => setShowMissDialog(false)}
-      />
       <RoundCompleteModal
-        visible={
-          gameState.status === "path-complete" && !showCategorySelect && !showMissDialog && !showChainModal
-        }
+        visible={gameState.status === "solved" && !showCategorySelect && !showChainModal}
         score={gameState.score}
-        misses={gameState.misses}
+        misses={PUZZLE_MISTAKE_ALLOWANCE - gameState.mistakesRemaining}
         roundsCompleted={gameState.roundsCompleted}
         onContinue={handleContinueRound}
         onSave={handleSaveAndExit}
         onEnd={handleEndSession}
-        onViewChain={handleViewChain}
+        onViewChain={() => setShowChainModal(true)}
       />
       <ConnectionChainModal
         visible={showChainModal}
         board={gameState.board}
         connections={gameState.completedConnections}
-        onClose={handleCloseChain}
+        onClose={() => setShowChainModal(false)}
       />
       <HowToPlayModal visible={showHowToPlay} onClose={handleCloseHowToPlay} onWatchTutorial={handleWatchTutorial} />
       <TutorialModal visible={showTutorial} onFinish={handleFinishTutorial} />
       <CategorySelectModal
         visible={showCategorySelect}
-        categories={GAME_CATEGORIES}
         onSelect={handleSelectCategory}
         savedGame={
           savedGame
             ? {
-                categoryName:
-                  GAME_CATEGORIES.find((category) => category.id === savedGame.categoryId)?.name ??
-                  "Saved category",
+                categoryName: savedCategory?.name ?? "Saved category",
+                genreName: savedCategory?.genreLabel ?? "All genres",
                 score: savedGame.progress.score,
-                misses: savedGame.progress.misses,
                 roundsCompleted: savedGame.progress.roundsCompleted,
               }
             : null
         }
         onResume={handleResumeSavedGame}
+        onCancel={selectedCategory ? () => setShowCategorySelect(false) : undefined}
       />
       <LeaderboardModal
         visible={showLeaderboard}
         onClose={() => setShowLeaderboard(false)}
         refreshKey={leaderboardRefreshKey}
-        highlightScore={gameState.status !== "playing" ? gameState.score : undefined}
+        highlightScore={isOver ? gameState.score : undefined}
+        initialBoard={activeBoard}
       />
     </View>
   );
@@ -428,11 +480,23 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     backgroundColor: "#0f1a33",
   },
-  levelText: {
+  levelWrap: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  levelText: {
+    flexShrink: 1,
     color: colors.textSecondary,
     fontWeight: "800",
     fontSize: 10,
+  },
+  changeText: {
+    color: colors.song,
+    fontWeight: "800",
+    fontSize: 9,
+    letterSpacing: 0.5,
   },
   stepText: {
     color: colors.song,
@@ -488,6 +552,40 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: "600",
     fontSize: 11,
+    textAlign: "center",
+  },
+  connectionWrap: {
+    width: "100%",
+    maxWidth: 480,
+    alignItems: "center",
+    paddingHorizontal: 12,
+  },
+  connectionHeading: {
+    color: colors.textPrimary,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  connectionRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  connectionChip: {
+    minWidth: 96,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  connectionText: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.4,
     textAlign: "center",
   },
 });

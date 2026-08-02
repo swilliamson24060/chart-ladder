@@ -9,10 +9,17 @@ service cloud.firestore {
     match /scores/{scoreId} {
       allow read: if true;
 
-      allow create: if request.resource.data.keys().hasOnly(['name', 'score', 'createdAt'])
+      // `board` is the leaderboard a score belongs to, "<genre>/<rule>" -
+      // see ladderLeaderboardKey(). Required, so every new score lands on
+      // exactly one table. Scores written before boards existed have no
+      // field and simply stop matching any query.
+      allow create: if request.resource.data.keys().hasOnly(['name', 'score', 'board', 'createdAt'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 12
+        && request.resource.data.board is string
+        && request.resource.data.board.size() > 0
+        && request.resource.data.board.size() <= 40
         && request.resource.data.score is int
         && request.resource.data.score >= 0
         && request.resource.data.score <= 100000

@@ -65,12 +65,106 @@ def add(groups, key, value, song_id):
     groups[key][value].add(song_id)
 
 
-# Chart-tier thresholds. These two traits are deliberately coarse and
-# binary: a player can plausibly recall whether a song was a Top 40 hit or
-# whether it hung around for a season, but never that two songs both peaked
-# at exactly #63 or both ran 20-29 weeks.
-TOP_40_CUTOFF = 40
-LONG_RUN_CUTOFF_WEEKS = 13  # ~3 months
+# --- awards ---------------------------------------------------------------
+#
+# Wikidata files sales certifications under the same property (P166) as
+# actual awards, so the raw data's four largest "award" groups were French
+# SNEP gold/platinum/diamond singles - 85 of 217 memberships. Nobody reasons
+# "both of these went platinum in France", so certifications are dropped.
+AWARD_DROP_KEYWORDS = [
+    "snep", "certification", "gold record", "gold single", "platinum",
+    "diamond", "kloteplaat", "riaa", "bpi",
+]
+
+# The survivors are then collapsed to their parent award. Wikidata splits
+# every category into its own item ("Grammy Award for Song of the Year",
+# "...for Record of the Year", "...for Best Rock Song"), which left a dozen
+# groups of 2-7 songs each and meant two Grammy winners only connected if
+# they won the *same* category. Players think "both won Grammys", so that's
+# what the group should be. First match wins.
+AWARD_FAMILIES = [
+    ("Grammy Award", ["grammy"]),
+    ("Academy Award", ["academy award", "oscar"]),
+    ("Golden Globe", ["golden globe"]),
+    ("BRIT Award", ["brit award"]),
+    ("Juno Award", ["juno"]),
+    ("MTV Award", ["mtv"]),
+    ("Soul Train Music Award", ["soul train"]),
+    ("BET Award", ["bet award"]),
+    ("Billboard Music Award", ["billboard music award"]),
+    ("Ivor Novello Award", ["ivor novello"]),
+    ("NRJ Music Award", ["nrj"]),
+    ("American Music Award", ["american music award", "favorite country single"]),
+    ("Country Music Award", ["country music association", "academy of country music"]),
+]
+
+
+def normalize_award(name):
+    """The parent award family, or None if this is a certification rather
+    than an award. Unrecognised awards keep their original name - they'll
+    usually fall below the min-group-size and drop out on their own."""
+    low = name.lower()
+    if any(kw in low for kw in AWARD_DROP_KEYWORDS):
+        return None
+    for family, keywords in AWARD_FAMILIES:
+        if any(kw in low for kw in keywords):
+            return family
+    return name
+
+
+# Connection types exempt from --max-group-size.
+#
+# Sampling an oversized group down to a fixed cap is fine for types where
+# membership is incidental (one of thousands of shared title words), but
+# wrong for a type the player reasons about directly. If only 400 of the
+# ~1,500 songs that charted in 1984 were sampled into that group, a player
+# correctly answering "same year" about two 1984 records could be marked
+# wrong purely because neither was sampled. Year groups stay complete.
+UNCAPPED_TYPES = {"same_year"}
+
+
+# --- genre buckets --------------------------------------------------------
+#
+# Wikidata carries 388 song genres and 582 performer genres, most of them
+# long-tail and heavily overlapping ("pop music" / "pop rock" / "dance-pop"
+# describe largely the same records). Raw tags are unusable as a category
+# list, so each song is assigned one broad bucket instead.
+#
+# Order matters: buckets are tested in sequence and the first match wins.
+# Pop is deliberately last because it's the catch-all tag that sits on a
+# large share of country, R&B and rock records too - testing it first would
+# swallow almost everything.
+# Order is load-bearing, because these are substring tests against messy
+# compound tags. rnb-soul must precede jazz-blues or "rhythm and blues"
+# files every R&B record under blues; rock must also precede it or
+# "blues rock" drags Aerosmith and the Stones in there too. Pop is last
+# because it's the catch-all tag that also sits on a large share of
+# country, R&B and rock records.
+GENRE_BUCKETS = [
+    ("hip-hop", ["hip hop", "hip-hop", "rap", "trap music", "gangsta", "drill"]),
+    ("country", ["country", "bluegrass", "honky", "nashville", "western swing", "rockabilly"]),
+    ("rnb-soul", ["r&b", "rhythm and blues", "soul", "motown", "funk", "gospel", "doo-wop", "disco"]),
+    ("rock", ["rock", "metal", "punk", "grunge", "new wave", "psychedelic", "britpop"]),
+    ("pop", ["pop", "dance", "house music", "electronic", "synth", "teen pop", "adult contemporary"]),
+]
+# There is deliberately no jazz/blues bucket: almost every jazz or blues act
+# on the Hot 100 also carries a rock or soul tag, so the bucket collapsed to
+# 401 songs (67 above the default fame floor) - far too thin to play.
+
+
+def genre_bucket(tags):
+    """The first bucket whose keywords appear in any of the song's genre
+    tags, or None if nothing matches. Substring matching is intentional -
+    it catches "alternative rock", "southern rock", "art rock" for rock
+    without enumerating every variant Wikidata happens to use."""
+    lowered = [t.lower() for t in tags if t]
+    if not lowered:
+        return None
+    for bucket, keywords in GENRE_BUCKETS:
+        for tag in lowered:
+            if any(kw in tag for kw in keywords):
+                return bucket
+    return None
 
 
 # --- fame scoring ---------------------------------------------------------
@@ -191,6 +285,8 @@ def main():
                     "first_year": None,
                     "chart_years": set(),
                     "has_award": False,
+                    # genre tags, collapsed to one bucket after the read loop
+                    "genre_tags": set(),
                 }
                 song_by_title_perf[(normalize_title(title), performer)] = song_id
                 performer_titles[performer].add(song_id)
@@ -221,11 +317,11 @@ def main():
             # --- CSV-only connections ---
             add(groups, "same_performer", performer, song_id)
             add(groups, "same_title", normalize_title(title), song_id)
-            # NB: chart tier and chart run are deliberately NOT computed
-            # here. Both depend on the song's *final* peak/week totals, and
-            # inside this loop those are only the running values seen so far
-            # - a song that debuts at #80 and climbs to #2 would be filed
-            # under both tiers. They're derived after the read loop instead.
+            # NB: anything derived from a song's *final* peak or week totals
+            # must not be computed here - inside this loop those are only the
+            # running values seen so far, so a song that debuts at #80 and
+            # climbs to #2 would be filed under whichever bucket it passed
+            # through. Derive after the read loop instead (see compute_fame).
 
             collab_names = split_performers(performer)
             if len(collab_names) > 1:
@@ -240,9 +336,11 @@ def main():
                 for genre in (row.get("wd_performer_genres") or "").split("|"):
                     if genre:
                         add(groups, "same_artist_genre", genre, song_id)
+                        s["genre_tags"].add(genre)
                 for genre in (row.get("wd_song_genres") or "").split("|"):
                     if genre:
                         add(groups, "same_song_genre", genre, song_id)
+                        s["genre_tags"].add(genre)
                 for label in (row.get("wd_performer_labels") or "").split("|"):
                     if label:
                         add(groups, "same_label", label, song_id)
@@ -254,7 +352,9 @@ def main():
                         add(groups, "same_producer", producer, song_id)
                 for award in (row.get("wd_awards") or "").split("|"):
                     if award:
-                        add(groups, "same_award", award, song_id)
+                        family = normalize_award(award)
+                        if family:
+                            add(groups, "same_award", family, song_id)
                 for member in (row.get("wd_band_members") or "").split("|"):
                     if member:
                         add(groups, "band_membership", member, song_id)
@@ -265,22 +365,27 @@ def main():
                 if mbid:
                     add(groups, "same_artist_identity", mbid, song_id)  # catches name variants of the same act
 
-    # Chart tier and chart run, both derived once per song from its final
-    # totals so each song lands in exactly one group of each pair.
+    # Same debut chart year. Derived here rather than in the read loop so it
+    # uses the song's *first* appearance rather than whichever week happened
+    # to be read last - a song that re-enters decades later (every Christmas
+    # perennial) must stay filed under its original year, or "both from 1958"
+    # becomes nonsense.
     #
-    # Tier replaces exact peak position: "both peaked at #63" is a
-    # coincidence no player can reason about, whereas "both were Top 40
-    # hits" is a fact about a song someone might actually know. Run length
-    # replaces the old five-way week buckets, which asked players to tell a
-    # 20-29 week run from a 30-49 week one. Each is two mutually exclusive
-    # connection types rather than one type with two groups, so the tile the
-    # player picks names which side it is.
+    # Era is the second most knowable thing about a song after who sang it:
+    # most people can place a record in a decade from the production alone.
+    # Exact year rather than decade because it's far more discriminative -
+    # ~1.6% of random pairs share a year against ~15% for a decade.
     for song_id, s in songs.items():
-        if s["peak_pos"] is not None:
-            tier = "top_40" if s["peak_pos"] <= TOP_40_CUTOFF else "outside_top_40"
-            add(groups, tier, tier, song_id)
-        run = "long_run" if s["max_wks_on_chart"] >= LONG_RUN_CUTOFF_WEEKS else "short_run"
-        add(groups, run, run, song_id)
+        if s["first_year"] is not None:
+            add(groups, "same_year", str(s["first_year"]), song_id)
+
+    # NB: there is deliberately no chart-position or chart-longevity
+    # connection type. Both exact peak position ("these two both peaked at
+    # #63") and coarse tiers ("both were Top 40 hits") fail as ladder links -
+    # the first is a coincidence nobody can reason about, and the second is
+    # true of roughly half of all pairs, so it can't discriminate which songs
+    # belong in a chain. Peak position and weeks survive only as inputs to
+    # the fame score, where being coarse and correlated is a virtue.
 
     # shared title words (only for titles that aren't exact matches -- that's same_title's job)
     word_groups = defaultdict(set)
@@ -316,8 +421,11 @@ def main():
     songs_array = []
     for sid in ordered_song_ids:
         s = songs[sid]
-        songs_array.append([s["title"], s["performer"], s["peak_pos"], s["max_wks_on_chart"], fame[sid]])
-    # songs_array columns, in order: [title, performer, peak_pos, max_wks_on_chart, fame]
+        songs_array.append([
+            s["title"], s["performer"], s["peak_pos"], s["max_wks_on_chart"], fame[sid],
+            genre_bucket(s["genre_tags"]) or "", s["first_year"] or 0,
+        ])
+    # songs_array columns: [title, performer, peak_pos, max_wks_on_chart, fame, genre, debut_year]
 
     # finalize: drop groups below min size, cap oversized groups, remap to int IDs
     final = {}
@@ -330,7 +438,7 @@ def main():
             if len(id_set) < args.min_group_size:
                 continue
             ids = sorted(id_set)
-            if len(ids) > args.max_group_size:
+            if len(ids) > args.max_group_size and conn_type not in UNCAPPED_TYPES:
                 ids = random.sample(ids, args.max_group_size)
             out[key] = [id_index[sid] for sid in ids]
         if out:
@@ -344,7 +452,7 @@ def main():
             }
 
     result = {
-        "song_fields": ["title", "performer", "peak_pos", "max_wks_on_chart", "fame"],
+        "song_fields": ["title", "performer", "peak_pos", "max_wks_on_chart", "fame", "genre", "debut_year"],
         "songs": songs_array,
         "connections": final,
     }
@@ -369,6 +477,16 @@ def main():
     print(f"{'connection_type':<24}{'groups':>8}{'songs covered':>16}{'avg size':>10}{'max size':>10}")
     for conn_type, s in sorted(stats.items(), key=lambda x: -x[1]["total_songs_involved"]):
         print(f"{conn_type:<24}{s['num_groups']:>8}{s['total_songs_involved']:>16}{s['avg_group_size']:>10}{s['largest_group']:>10}")
+
+    bucket_counts = defaultdict(lambda: [0, 0])  # bucket -> [all, fame>=60]
+    for sid in ordered_song_ids:
+        b = genre_bucket(songs[sid]["genre_tags"]) or "(untagged)"
+        bucket_counts[b][0] += 1
+        if fame[sid] >= 60:
+            bucket_counts[b][1] += 1
+    print(f"\n{'genre bucket':<16}{'songs':>9}{'fame>=60':>10}")
+    for b, (n, n60) in sorted(bucket_counts.items(), key=lambda x: -x[1][0]):
+        print(f"{b:<16}{n:>9}{n60:>10}")
 
     emitted_fame = sorted((fame[sid] for sid in ordered_song_ids), reverse=True)
     print(f"\n{'fame floor':<14}{'songs above':>13}{'% of pool':>11}")

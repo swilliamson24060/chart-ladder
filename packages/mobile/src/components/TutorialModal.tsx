@@ -49,10 +49,7 @@ const CONNECTION_PHRASES: Record<LadderTileKey, string> = {
   band_collab: "a collaboration or band member",
   same_genre: "a genre",
   same_award: "an award",
-  top_40: "both being Top 40 hits",
-  outside_top_40: "both missing the Top 40",
-  long_run: "both lasting 3+ months on the chart",
-  short_run: "both lasting under 3 months",
+  same_year: "the year they first charted",
 };
 
 const TUTORIAL_TILE_KEYS = ladderTileKeysForCategory(defaultCategory.id);
@@ -82,14 +79,8 @@ function explanationLine(reason: LadderTileKey, previousTile: LadderSongTile, ch
       return "Both songs share a genre.";
     case "same_award":
       return "Both songs won the same award.";
-    case "top_40":
-      return `Both were Top 40 hits (#${previousTile.peakPos} and #${chosenTile.peakPos}).`;
-    case "outside_top_40":
-      return `Neither one cracked the Top 40 (#${previousTile.peakPos} and #${chosenTile.peakPos}).`;
-    case "long_run":
-      return `Both spent 3+ months on the Hot 100 (${previousTile.maxWksOnChart} and ${chosenTile.maxWksOnChart} weeks).`;
-    case "short_run":
-      return `Both spent under 3 months on the Hot 100 (${previousTile.maxWksOnChart} and ${chosenTile.maxWksOnChart} weeks).`;
+    case "same_year":
+      return `Both first charted in ${chosenTile.debutYear || previousTile.debutYear}.`;
   }
 }
 

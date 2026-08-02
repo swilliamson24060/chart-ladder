@@ -6,6 +6,8 @@ import { colors } from "../theme";
 
 interface Props {
   status: GuidedGameStatus;
+  /** Which leaderboard this score belongs on - see ladderLeaderboardKey(). */
+  board: string;
   finalScore: number;
   misses: number;
   roundsCompleted: number;
@@ -18,6 +20,7 @@ type SubmitState = "idle" | "submitting" | "done" | "error";
 
 export function GuidedGameOverModal({
   status,
+  board,
   finalScore,
   misses,
   roundsCompleted,
@@ -41,7 +44,7 @@ export function GuidedGameOverModal({
     if (!name.trim() || submitState === "submitting") return;
     setSubmitState("submitting");
     try {
-      await submitScore(name, finalScore);
+      await submitScore(name, finalScore, board);
       setSubmitState("done");
       onScoreSubmitted();
     } catch {

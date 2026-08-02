@@ -10,3 +10,4 @@ export * from "./tileLabel";
 export * from "./connections";
 export * from "./explainConnection";
 export * from "./ladder";
+export * from "./puzzle";

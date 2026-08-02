@@ -34,8 +34,12 @@ export function BoardGrid({
             const isPendingGap =
               pendingActionCell?.row === cell.row && pendingActionCell?.col === cell.col;
             return (
-              <View
+              // Pressable rather than a plain View so an empty cell can be a
+              // drop target - the puzzle mode needs open rungs to be tappable
+              // before anything is placed on them.
+              <Pressable
                 key={cell.col}
+                onPress={() => onCellPress(cell.row, cell.col)}
                 style={[
                   styles.cell,
                   {
@@ -44,9 +48,10 @@ export function BoardGrid({
                     borderColor: isPendingGap
                       ? colors.pendingGap
                       : isHighlighted
-                        ? colors.decade
+                        ? colors.wildcard
                         : colors.cellBorder,
-                    borderWidth: isPendingGap ? 3 : isHighlighted ? 2 : 1,
+                    borderWidth: isPendingGap ? 3 : isHighlighted ? 2.5 : 1,
+                    borderStyle: isHighlighted ? "dashed" : "solid",
                     backgroundColor: isPendingGap ? `${colors.pendingGap}22` : colors.cellEmpty,
                   },
                 ]}

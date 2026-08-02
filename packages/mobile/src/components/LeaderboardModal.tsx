@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ladderLeaderboards } from "@chartcross/engine";
 import { colors } from "../theme";
 import { fetchTop40, type LeaderboardEntry } from "../leaderboard";
 
@@ -9,18 +10,29 @@ interface Props {
   /** Bumped by the caller after a score submission to force a refetch. */
   refreshKey?: number;
   highlightScore?: number;
+  /** Board to open on - normally whatever the player just finished. */
+  initialBoard: string;
 }
 
-export function LeaderboardModal({ visible, onClose, refreshKey, highlightScore }: Props) {
+const BOARDS = ladderLeaderboards();
+
+export function LeaderboardModal({ visible, onClose, refreshKey, highlightScore, initialBoard }: Props) {
   const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [board, setBoard] = useState(initialBoard);
+
+  // Reopening after a different round should land on that round's board
+  // rather than wherever the player last browsed to.
+  useEffect(() => {
+    if (visible) setBoard(initialBoard);
+  }, [visible, initialBoard]);
 
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
     setEntries(null);
     setError(null);
-    fetchTop40()
+    fetchTop40(board)
       .then((result) => {
         if (!cancelled) setEntries(result);
       })
@@ -30,7 +42,7 @@ export function LeaderboardModal({ visible, onClose, refreshKey, highlightScore 
     return () => {
       cancelled = true;
     };
-  }, [visible, refreshKey]);
+  }, [visible, refreshKey, board]);
 
   if (!visible) return null;
 
@@ -45,12 +57,31 @@ export function LeaderboardModal({ visible, onClose, refreshKey, highlightScore 
             </Pressable>
           </View>
 
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.boardBar}
+            contentContainerStyle={styles.boardBarContent}
+          >
+            {BOARDS.map((option) => (
+              <Pressable
+                key={option.key}
+                onPress={() => setBoard(option.key)}
+                style={[styles.boardChip, option.key === board && styles.boardChipActive]}
+              >
+                <Text style={[styles.boardChipText, option.key === board && styles.boardChipTextActive]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
           {error ? (
             <Text style={styles.emptyText}>{error}</Text>
           ) : entries === null ? (
             <ActivityIndicator color={colors.textPrimary} style={styles.loading} />
           ) : entries.length === 0 ? (
-            <Text style={styles.emptyText}>No scores yet — be the first!</Text>
+            <Text style={styles.emptyText}>No scores on this board yet — be the first!</Text>
           ) : (
             <FlatList
               data={entries}
@@ -79,6 +110,34 @@ export function LeaderboardModal({ visible, onClose, refreshKey, highlightScore 
 }
 
 const styles = StyleSheet.create({
+  boardBar: {
+    flexGrow: 0,
+    marginBottom: 10,
+  },
+  boardBarContent: {
+    gap: 6,
+    paddingRight: 8,
+  },
+  boardChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.cellBorder,
+    backgroundColor: colors.boardBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  boardChipActive: {
+    borderColor: colors.song,
+    backgroundColor: colors.songDim,
+  },
+  boardChipText: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  boardChipTextActive: {
+    color: colors.textPrimary,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(5, 8, 18, 0.72)",

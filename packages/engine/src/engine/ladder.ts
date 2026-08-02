@@ -34,16 +34,25 @@ export interface LadderSong {
    * would turn the game into number-matching instead of music reasoning.
    */
   fame: number;
+  /**
+   * One of the broad genre buckets the data pipeline collapses Wikidata's
+   * 388 song / 582 performer genres down to, or "" when the song carries no
+   * usable genre tag (about 30% of the chart). Used only for category
+   * eligibility, never as a connection - see LADDER_GENRES.
+   */
+  genre: string;
+  /**
+   * The year the song first entered the Hot 100, or 0 if unknown. First
+   * entry rather than peak year, so a Christmas perennial that re-charts
+   * every December stays filed under the year it actually came out.
+   */
+  debutYear: number;
 }
 
 /** Every attribute-grouping the data pipeline (scripts/connections_generator.py) produces. */
 export type LadderConnectionType =
   | "same_performer"
   | "same_title"
-  | "top_40"
-  | "outside_top_40"
-  | "long_run"
-  | "short_run"
   | "same_artist_genre"
   | "same_label"
   | "band_membership"
@@ -53,14 +62,14 @@ export type LadderConnectionType =
   | "same_writer"
   | "same_producer"
   | "same_award"
-  | "chart_longevity"
+  | "same_year"
   | "shared_title_word"
   | "one_hit_wonder_flag";
 
 export interface LadderRawData {
   song_fields: string[];
-  /** [title, performer, peak_pos, max_wks_on_chart, fame] - fame is absent in datasets built before fame scoring landed. */
-  songs: Array<[string, string, number, number, number?]>;
+  /** [title, performer, peak_pos, max_wks_on_chart, fame, genre, debut_year] - the last three are absent in older datasets. */
+  songs: Array<[string, string, number, number, number?, string?, number?]>;
   connections: Partial<Record<LadderConnectionType, Record<string, number[]>>>;
 }
 
@@ -78,14 +87,18 @@ export interface LadderDataset {
 }
 
 export function buildLadderDataset(raw: LadderRawData): LadderDataset {
-  const songs: LadderSong[] = raw.songs.map(([title, performer, peakPos, maxWksOnChart, fame], id) => ({
-    id,
-    title,
-    performer,
-    peakPos,
-    maxWksOnChart,
-    fame: fame ?? 0,
-  }));
+  const songs: LadderSong[] = raw.songs.map(
+    ([title, performer, peakPos, maxWksOnChart, fame, genre, debutYear], id) => ({
+      id,
+      title,
+      performer,
+      peakPos,
+      maxWksOnChart,
+      fame: fame ?? 0,
+      genre: genre ?? "",
+      debutYear: debutYear ?? 0,
+    }),
+  );
   return {
     songs,
     connections: raw.connections,
@@ -137,88 +150,27 @@ function fameFallbacks(minFame: number): number[] {
 // --- Guessable connection tiles ------------------------------------------
 
 /**
- * The connection types a player can actually pick during a round - each
- * maps to one or two of the data pipeline's raw connection types (see
- * scripts/round_selector.py, the reference design this mirrors). SAME_YEAR
- * isn't here: the ladder dataset has no year data at all.
+ * Deliberately only four, and all four are *relationships* between two
+ * songs rather than properties of each song alone.
+ *
+ * Chart-position and chart-longevity connections were tried and removed. An
+ * exact match ("both peaked at #63") is a coincidence nobody can reason
+ * about; a coarse tier ("both were Top 40 hits") is true of roughly half of
+ * all pairs, which means it cannot discriminate which songs belong in a
+ * chain - with tiers counted, 99.5% of steps had a decoy that genuinely
+ * connected to the previous song, and a 9-tile puzzle had no valid decoys
+ * at all. Peak position and weeks on chart survive as inputs to the fame
+ * score, where being coarse and correlated is a virtue rather than a flaw.
  */
-export type LadderTileKey =
-  | "same_artist"
-  | "band_collab"
-  | "same_genre"
-  | "same_award"
-  | "top_40"
-  | "outside_top_40"
-  | "long_run"
-  | "short_run";
+export type LadderTileKey = "same_artist" | "band_collab" | "same_genre" | "same_award" | "same_year";
 
 export const LADDER_TILE_KEYS: LadderTileKey[] = [
   "same_artist",
   "band_collab",
   "same_genre",
   "same_award",
-  "top_40",
-  "outside_top_40",
-  "long_run",
-  "short_run",
+  "same_year",
 ];
-
-/**
- * The four chart-tier keys are properties of each song on its own rather
- * than relationships between the pair, so they can be checked exactly from
- * the tiles themselves (see tierConnectionHolds). That matters for scoring:
- * the generator caps every connection group at a sample of the songs that
- * qualify, so group membership alone would reject a player who correctly
- * said "both were Top 40 hits" about a pair that simply wasn't sampled into
- * the group.
- */
-const TIER_TILE_KEYS: LadderTileKey[] = ["top_40", "outside_top_40", "long_run", "short_run"];
-
-/**
- * The two complementary tier pairs. Each song sits on exactly one side, so
- * if a pair shares a side the opposite key isn't merely false, it's
- * *provably* false from the very same fact - offering it as a decoy would
- * be offering an answer the player can eliminate for free.
- *
- * This matters more than it looks, because fame is computed from peak
- * position and weeks on chart, so a fame floor correlates strongly with
- * these tiers: only ~107 of the 18,186 songs outside the Top 40 reach fame
- * 60. Without this rule, BOTH MISSED TOP 40 and BOTH UNDER 3 MONTHS are
- * near-permanent wrong answers at the default difficulty, and a player who
- * notices goes from a 1-in-3 guess to roughly 1-in-2.
- */
-const TIER_COMPLEMENTS: Array<[LadderTileKey, LadderTileKey]> = [
-  ["top_40", "outside_top_40"],
-  ["long_run", "short_run"],
-];
-
-export const TOP_40_CUTOFF = 40;
-export const LONG_RUN_CUTOFF_WEEKS = 13; // ~3 months
-
-function songMatchesTier(song: { peakPos: number; maxWksOnChart: number }, tileKey: LadderTileKey): boolean {
-  switch (tileKey) {
-    case "top_40":
-      return song.peakPos <= TOP_40_CUTOFF;
-    case "outside_top_40":
-      return song.peakPos > TOP_40_CUTOFF;
-    case "long_run":
-      return song.maxWksOnChart >= LONG_RUN_CUTOFF_WEEKS;
-    case "short_run":
-      return song.maxWksOnChart < LONG_RUN_CUTOFF_WEEKS;
-    default:
-      return false;
-  }
-}
-
-/** Whether a tier tile key is genuinely true of both songs, independent of connection-group sampling. */
-function tierConnectionHolds(
-  a: { peakPos: number; maxWksOnChart: number },
-  b: { peakPos: number; maxWksOnChart: number },
-  tileKey: LadderTileKey,
-): boolean {
-  if (!TIER_TILE_KEYS.includes(tileKey)) return false;
-  return songMatchesTier(a, tileKey) && songMatchesTier(b, tileKey);
-}
 
 /**
  * Any tile key can have a large, common group that would otherwise
@@ -228,6 +180,66 @@ function tierConnectionHolds(
  * limit - 1 time (55% chance), 2 times (30%), or 3 times (15%) - across
  * the whole chain (the 5 guided steps plus the automatic anchor link).
  */
+/**
+ * How many songs by one performer a single chain may contain.
+ *
+ * Without this, a chain would happily run five OneRepublic songs end to end
+ * - the usage caps below spread the *connection types* around, but nothing
+ * stopped one artist supplying every rung. That's especially bad in the
+ * genre categories, where same_genre is excluded and same_artist has little
+ * competition.
+ *
+ * It cannot be 1. A same_artist link is by definition two songs by the same
+ * act, so a one-song-per-performer rule would make the game's most solvable
+ * connection type impossible to build. Two is the tightest cap that still
+ * permits exactly one same_artist hop per performer.
+ */
+export const MAX_SONGS_PER_PERFORMER = 2;
+
+/**
+ * Relative likelihood of choosing a connection type when several are
+ * available for the same hop.
+ *
+ * Not all connections are equally *specific*. Any given song shares its
+ * debut year with roughly 470 others, so same_year is available at nearly
+ * every hop, while same_artist or band_collab are only occasionally
+ * possible. Picking uniformly from what's available therefore handed
+ * same_year half of every chain - it won by always showing up, not by being
+ * the more interesting link. Down-weighting it restores the situational
+ * connections without removing the era link that genre rounds needed.
+ */
+const TILE_KEY_SELECTION_WEIGHT: Record<LadderTileKey, number> = {
+  same_artist: 3,
+  band_collab: 3,
+  same_genre: 3,
+  same_award: 3,
+  same_year: 1,
+};
+
+/**
+ * Hard ceiling on same_year links in one chain, enforced during route
+ * *construction* rather than selection.
+ *
+ * Weighting alone couldn't hold it down: for 31-50% of the pairs a route
+ * used, same_year was the only connection that held at all, so the builder
+ * kept walking year links because they were the easiest to find. Unlike the
+ * soft caps below - which fall back to an over-cap key rather than fail -
+ * hitting this one removes same_year from consideration entirely, so the
+ * attempt either finds a richer link or restarts. Left unchecked, "answer
+ * SAME YEAR when unsure" became a winning strategy on half of all rounds.
+ */
+const MAX_SAME_YEAR_LINKS = 2;
+
+function weightedPick(rng: () => number, keys: LadderTileKey[]): LadderTileKey {
+  const total = keys.reduce((sum, key) => sum + TILE_KEY_SELECTION_WEIGHT[key], 0);
+  let roll = rng() * total;
+  for (const key of keys) {
+    roll -= TILE_KEY_SELECTION_WEIGHT[key];
+    if (roll < 0) return key;
+  }
+  return keys[keys.length - 1];
+}
+
 function rollUsageCap(rng: () => number): number {
   const roll = rng();
   if (roll < 0.55) return 1;
@@ -240,10 +252,7 @@ export const LADDER_TILE_LABELS: Record<LadderTileKey, string> = {
   band_collab: "BAND / COLLAB",
   same_genre: "SAME GENRE",
   same_award: "SAME AWARD",
-  top_40: "BOTH TOP 40",
-  outside_top_40: "BOTH MISSED TOP 40",
-  long_run: "BOTH 3+ MONTHS ON CHART",
-  short_run: "BOTH UNDER 3 MONTHS",
+  same_year: "SAME YEAR",
 };
 
 const LADDER_TILE_CONNECTION_TYPES: Record<LadderTileKey, LadderConnectionType[]> = {
@@ -251,15 +260,39 @@ const LADDER_TILE_CONNECTION_TYPES: Record<LadderTileKey, LadderConnectionType[]
   band_collab: ["collaboration", "band_membership"],
   same_genre: ["same_song_genre"],
   same_award: ["same_award"],
-  top_40: ["top_40"],
-  outside_top_40: ["outside_top_40"],
-  long_run: ["long_run"],
-  short_run: ["short_run"],
+  same_year: ["same_year"],
 };
 
 // --- Categories (extensible - add an entry here for a new category) ------
 
-export type LadderCategoryId = "one-hit-wonders" | "lightning-strikes-twice" | "number-one-hits" | "top-tier";
+/**
+ * The genre buckets scripts/connections_generator.py assigns. Kept broad and
+ * few on purpose: Wikidata's raw tags are long-tail and heavily overlapping,
+ * so a list built from them would run to hundreds of near-duplicate entries.
+ *
+ * Genre is an axis *above* category rather than a sibling of it - you pick
+ * Country first, then One Hit Wonders within it. LADDER_CATEGORIES is the
+ * resulting cross-product.
+ */
+export const LADDER_GENRES = [
+  { id: "pop", name: "Pop", buckets: ["pop"] },
+  { id: "rock", name: "Rock", buckets: ["rock"] },
+  { id: "country", name: "Country", buckets: ["country"] },
+  { id: "rnb-soul", name: "R&B & Soul", buckets: ["rnb-soul"] },
+  { id: "hip-hop", name: "Hip-Hop", buckets: ["hip-hop"] },
+] as const;
+
+export type LadderGenreId = (typeof LADDER_GENRES)[number]["id"];
+
+/** The rule half of a category, before any genre filter is applied. */
+export type LadderBaseCategoryId = "up-to-three-hits" | "number-one-hits" | "top-tier";
+
+/**
+ * Composite id, `"<genre>/<base>"` for a genre-filtered category and just
+ * `"<base>"` for the all-genres version. Kept as a plain string so a saved
+ * game can round-trip one without the type having to enumerate 24 cases.
+ */
+export type LadderCategoryId = string;
 
 export interface LadderCategoryContext {
   performerSongCounts: Map<string, number>;
@@ -267,41 +300,70 @@ export interface LadderCategoryContext {
 
 export interface LadderCategoryDef {
   id: LadderCategoryId;
+  /** The rule this category applies, independent of genre. */
+  baseId: LadderBaseCategoryId;
+  /** Undefined for the all-genres version of a category. */
+  genreId?: LadderGenreId;
+  /** Display name for the genre portion - "Pop & Country" where genres are pooled. */
+  genreLabel?: string;
+  /** Set when this rule pools several genres together; see BaseCategory.genreMerges. */
+  mergedGenreIds?: LadderGenreId[];
   name: string;
   description: string;
   isEligible: (song: LadderSong, ctx: LadderCategoryContext) => boolean;
   /**
    * Tile keys that should never be offered - as the correct answer or a
-   * decoy - for this category, because the category's own eligibility
-   * rule makes that connection meaningless (e.g. every song in "We're
-   * Number 1!" already peaks at #1, so top_40 would trivially match any two
-   * songs) or impossible (e.g. same_artist for One Hit Wonders, where every
-   * performer has exactly one song, or outside_top_40 for "We're Number
-   * 1!", which no eligible song can satisfy).
+   * decoy - because the category's own rule makes that connection
+   * meaningless or impossible. same_artist is impossible for One Hit
+   * Wonders, where every performer has exactly one song; same_genre is
+   * meaningless inside a genre-filtered category, where every song already
+   * shares the bucket.
    */
   excludedTileKeys?: LadderTileKey[];
 }
 
-export const LADDER_CATEGORIES: LadderCategoryDef[] = [
+interface BaseCategory {
+  id: LadderBaseCategoryId;
+  name: string;
+  description: string;
+  isEligible: (song: LadderSong, ctx: LadderCategoryContext) => boolean;
+  excludedTileKeys?: LadderTileKey[];
+  /**
+   * Genres this rule pools together because neither is playable alone.
+   * Picking either genre gives the combined deck; the label and description
+   * say so, since quietly widening "Pop" to include Shania Twain would just
+   * look like a bug to the player.
+   */
+  genreMerges?: LadderGenreId[][];
+}
+
+/** The four rules, before any genre filter. */
+export const LADDER_BASE_CATEGORIES: BaseCategory[] = [
   {
-    id: "one-hit-wonders",
-    name: "One Hit Wonders",
-    description: "Artists with exactly one Hot 100 hit.",
-    isEligible: (song, ctx) => ctx.performerSongCounts.get(song.performer) === 1,
-    excludedTileKeys: ["same_artist"],
-  },
-  {
-    id: "lightning-strikes-twice",
-    name: "Lightning Strikes Twice",
-    description: "Artists with exactly two Hot 100 hits.",
-    isEligible: (song, ctx) => ctx.performerSongCounts.get(song.performer) === 2,
+    // Was two separate rules, One Hit Wonders and Lightning Strikes Twice,
+    // and both suffered for it: a one-hit artist has exactly one song, so
+    // same_artist was impossible, and inside a genre that also loses
+    // same_genre - Rock / One Hit Wonders couldn't build a single round.
+    //
+    // The ceiling is three rather than two because the fame floor eats most
+    // second hits. At <=2 only 57 artists had two songs clearing fame 60, so
+    // same_artist was still nearly absent; at <=3 that doubles to 134, and
+    // Country stops being too thin to offer (98 songs -> 133).
+    id: "up-to-three-hits",
+    name: "1 and a 2 and a 3...",
+    description: "Artists with three Hot 100 hits or fewer.",
+    isEligible: (song, ctx) => (ctx.performerSongCounts.get(song.performer) ?? 0) <= 3,
   },
   {
     id: "number-one-hits",
     name: "We're Number 1!",
     description: "Songs that reached the top of the Hot 100.",
     isEligible: (song) => song.peakPos === 1,
-    excludedTileKeys: ["top_40", "outside_top_40"],
+    // Pop has 101 chart-toppers clearing the fame floor and Country 105;
+    // both route but neither can supply four decoys that connect to nothing
+    // in the chain, so on their own they fail every seed. Pooled they reach
+    // 206 and build cleanly.
+    genreMerges: [["pop", "country"]],
   },
   {
     id: "top-tier",
@@ -311,14 +373,181 @@ export const LADDER_CATEGORIES: LadderCategoryDef[] = [
   },
 ];
 
-function categoryById(id: LadderCategoryId): LadderCategoryDef {
+/** Composite id for a genre/base pair; the base id alone means all genres. */
+export function ladderCategoryId(baseId: LadderBaseCategoryId, genreId?: LadderGenreId): LadderCategoryId {
+  return genreId ? `${genreId}/${baseId}` : baseId;
+}
+
+/**
+ * Every playable combination: each of the four rules on its own, plus each
+ * rule narrowed to each genre. Generated rather than hand-listed so adding
+ * a genre or a rule stays a one-line change.
+ *
+ * A genre-filtered category always excludes same_genre - every song in it
+ * already shares the bucket, so that connection would match any two songs
+ * trivially, the same failure that made the chart-tier connections useless.
+ */
+export const LADDER_CATEGORIES: LadderCategoryDef[] = [
+  ...LADDER_BASE_CATEGORIES.map((base) => ({
+    ...base,
+    id: ladderCategoryId(base.id),
+    baseId: base.id,
+  })),
+  ...LADDER_GENRES.flatMap((genre) =>
+    LADDER_BASE_CATEGORIES.map((base) => {
+      const merge = base.genreMerges?.find((group) => group.includes(genre.id));
+      const genreIds = merge ?? [genre.id];
+      const buckets = genreIds.flatMap(
+        (id) => LADDER_GENRES.find((g) => g.id === id)!.buckets as readonly string[],
+      );
+      const genreLabel = genreIds
+        .map((id) => LADDER_GENRES.find((g) => g.id === id)!.name)
+        .join(" & ");
+      return {
+        id: ladderCategoryId(base.id, genre.id),
+        baseId: base.id,
+        genreId: genre.id,
+        genreLabel,
+        mergedGenreIds: merge ? [...merge] : undefined,
+        name: base.name,
+        description: merge
+          ? `${base.description.replace(/\.$/, "")}. ${genreLabel} are combined - neither has enough chart-toppers on its own.`
+          : `${base.description.replace(/\.$/, "")}, ${genre.name} only.`,
+        isEligible: (song: LadderSong, ctx: LadderCategoryContext) =>
+          buckets.includes(song.genre) && base.isEligible(song, ctx),
+        excludedTileKeys: [...(base.excludedTileKeys ?? []), "same_genre" as LadderTileKey],
+      };
+    }),
+  ),
+];
+
+/**
+ * Fewest eligible songs a category may have and still be offered.
+ *
+ * Below this, rounds stop being reliable rather than merely narrow: a pool
+ * that small is usually so densely interconnected that four decoys which
+ * connect to nothing simply don't exist, so the engine reaches below the
+ * fame floor to find them and the answers end up the recognisable ones.
+ * Country / One Hit Wonders sat right on that line at 55 songs.
+ */
+export const MIN_CATEGORY_POOL = 100;
+
+/** Songs a category can actually draw on at a given fame floor. */
+export function categoryPoolSize(
+  dataset: LadderDataset,
+  categoryId: LadderCategoryId,
+  minFame: number = DEFAULT_MIN_FAME,
+): number {
+  const category = categoryById(categoryId);
+  const index = ladderIndex(dataset);
+  let count = 0;
+  for (const song of dataset.songs) {
+    if (!meetsFame(dataset, song, minFame)) continue;
+    if (category.isEligible(song, index.categoryContext)) count++;
+  }
+  return count;
+}
+
+const playabilityCache = new WeakMap<LadderDataset, Map<string, boolean>>();
+
+/**
+ * Whether a category can actually produce a round.
+ *
+ * Not every genre/rule pairing works. One Hit Wonders inside a genre
+ * excludes both same_artist (nobody has two songs) and same_genre (everyone
+ * shares the bucket), which leaves band_collab, same_award and a
+ * year link capped at two - rarely enough to chain six hops. Rock / One Hit
+ * Wonders fails on that despite 117 eligible songs, while Country / One Hit
+ * Wonders succeeds on 55, so neither pool size nor pairwise connectivity
+ * predicts it. Attempting a build is the only honest test.
+ *
+ * Results are cached per dataset, so the selection screen can probe the
+ * four rules for a chosen genre and hide the ones that can't be played.
+ */
+export function isCategoryPlayable(
+  dataset: LadderDataset,
+  categoryId: LadderCategoryId,
+  minFame: number = DEFAULT_MIN_FAME,
+): boolean {
+  let cache = playabilityCache.get(dataset);
+  if (!cache) {
+    cache = new Map();
+    playabilityCache.set(dataset, cache);
+  }
+  const key = `${categoryId}@${minFame}`;
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+
+  let playable = false;
+  try {
+    if (categoryPoolSize(dataset, categoryId, minFame) < MIN_CATEGORY_POOL) throw new Error("pool too small");
+    buildLadderRoute(dataset, categoryId, createRng(1), minFame);
+    playable = true;
+  } catch {
+    playable = false;
+  }
+  cache.set(key, playable);
+  return playable;
+}
+
+/**
+ * Whether a category can build at *exactly* this fame floor, without the
+ * relaxation isCategoryPlayable allows. A thin genre pool often builds only
+ * because the floor gets dropped, and callers reasoning about the fame band
+ * of a round need to tell those two cases apart.
+ */
+export function categoryHoldsFameFloor(
+  dataset: LadderDataset,
+  categoryId: LadderCategoryId,
+  minFame: number,
+): boolean {
+  return tryBuildLadderRoute(dataset, categoryId, createRng(1), minFame) !== null;
+}
+
+/**
+ * Canonical leaderboard key for a category, `"<genre>/<rule>"` with `all`
+ * for the unfiltered version.
+ *
+ * Distinct from the category id because merged genres must share one board:
+ * `pop/number-one-hits` and `country/number-one-hits` are two doors into the
+ * same deck, so their scores belong on the same table. Both resolve to
+ * `pop+country/number-one-hits`.
+ */
+export function ladderLeaderboardKey(category: LadderCategoryDef): string {
+  const genrePart = category.mergedGenreIds
+    ? [...category.mergedGenreIds].sort().join("+")
+    : (category.genreId ?? "all");
+  return `${genrePart}/${category.baseId}`;
+}
+
+/** Human-readable name for a leaderboard, e.g. "Rock · We're Number 1!". */
+export function ladderLeaderboardLabel(category: LadderCategoryDef): string {
+  return `${category.genreLabel ?? "All genres"} · ${category.name}`;
+}
+
+/**
+ * Every distinct leaderboard, deduped so merged genres contribute one entry
+ * rather than one per door. Ordered all-genres first, then by genre.
+ */
+export function ladderLeaderboards(): Array<{ key: string; label: string; category: LadderCategoryDef }> {
+  const seen = new Map<string, { key: string; label: string; category: LadderCategoryDef }>();
+  for (const category of LADDER_CATEGORIES) {
+    const key = ladderLeaderboardKey(category);
+    if (!seen.has(key)) {
+      seen.set(key, { key, label: ladderLeaderboardLabel(category), category });
+    }
+  }
+  return [...seen.values()];
+}
+
+export function categoryById(id: LadderCategoryId): LadderCategoryDef {
   const category = LADDER_CATEGORIES.find((c) => c.id === id);
   if (!category) throw new Error(`Unknown ladder category "${id}".`);
   return category;
 }
 
 /** The tile keys actually usable for a category - LADDER_TILE_KEYS minus its excludedTileKeys, if any. */
-function usableTileKeys(category: LadderCategoryDef): LadderTileKey[] {
+export function usableTileKeys(category: LadderCategoryDef): LadderTileKey[] {
   if (!category.excludedTileKeys || category.excludedTileKeys.length === 0) return LADDER_TILE_KEYS;
   const excluded = category.excludedTileKeys;
   return LADDER_TILE_KEYS.filter((key) => !excluded.includes(key));
@@ -383,7 +612,7 @@ function buildMemberships(dataset: LadderDataset): Map<number, Map<LadderTileKey
   return memberships;
 }
 
-function ladderIndex(dataset: LadderDataset): LadderIndex {
+export function ladderIndex(dataset: LadderDataset): LadderIndex {
   const cached = ladderIndexCache.get(dataset);
   if (cached) return cached;
   const result: LadderIndex = {
@@ -395,7 +624,7 @@ function ladderIndex(dataset: LadderDataset): LadderIndex {
 }
 
 /** True when a song clears the fame floor, or when the dataset carries no fame scores at all. */
-function meetsFame(dataset: LadderDataset, song: LadderSong, minFame: number): boolean {
+export function meetsFame(dataset: LadderDataset, song: LadderSong, minFame: number): boolean {
   if (minFame <= 0 || !dataset.hasFameScores) return true;
   return song.fame >= minFame;
 }
@@ -408,6 +637,7 @@ function eligibleNeighborIds(
   category: LadderCategoryDef,
   usedIds: Set<number>,
   minFame: number,
+  blockedPerformers?: Set<string>,
 ): number[] {
   const groups = index.memberships.get(songId)?.get(tileKey);
   if (!groups) return [];
@@ -418,6 +648,7 @@ function eligibleNeighborIds(
       if (id === songId || usedIds.has(id)) continue;
       const song = dataset.songs[id];
       if (!meetsFame(dataset, song, minFame)) continue;
+      if (blockedPerformers?.has(song.performer)) continue;
       if (category.isEligible(song, index.categoryContext)) candidates.add(id);
     }
   }
@@ -484,13 +715,6 @@ export function ladderTrueConnections(
   const groups = index.memberships.get(previousId);
   const found: LadderTileKey[] = [];
   for (const tileKey of usableTileKeys(categoryById(categoryId))) {
-    // Tier keys are exact properties of the two songs, so they're checked
-    // directly - group membership would under-report them, since the
-    // generator samples oversized groups down to a fixed cap.
-    if (TIER_TILE_KEYS.includes(tileKey)) {
-      if (tierConnectionHolds(previous, candidate, tileKey)) found.push(tileKey);
-      continue;
-    }
     for (const { connType, groupKey } of groups?.get(tileKey) ?? []) {
       if ((dataset.connections[connType]?.[groupKey] ?? []).includes(candidateId)) {
         found.push(tileKey);
@@ -545,12 +769,8 @@ export function ladderConnectionDetail(
         : `${fromTile.performer}; ${toTile.performer}`;
     case "band_collab":
       return `${fromTile.performer}; ${toTile.performer}`;
-    case "top_40":
-    case "outside_top_40":
-      return `#${fromTile.peakPos}; #${toTile.peakPos}`;
-    case "long_run":
-    case "short_run":
-      return `${fromTile.maxWksOnChart} wks; ${toTile.maxWksOnChart} wks`;
+    case "same_year":
+      return String(toTile.debutYear || fromTile.debutYear || "");
     case "same_genre":
     case "same_award": {
       const index = ladderIndex(dataset);
@@ -572,15 +792,17 @@ function availableTileKeys(
   category: LadderCategoryDef,
   usedIds: Set<number>,
   minFame: number,
+  blockedPerformers?: Set<string>,
 ): LadderTileKey[] {
   return usableTileKeys(category).filter(
-    (tileKey) => eligibleNeighborIds(songId, tileKey, dataset, index, category, usedIds, minFame).length > 0,
+    (tileKey) =>
+      eligibleNeighborIds(songId, tileKey, dataset, index, category, usedIds, minFame, blockedPerformers).length > 0,
   );
 }
 
 // --- Route (the prepared chain a round walks through) --------------------
 
-interface LadderRoute {
+export interface LadderRoute {
   starter: LadderSong;
   anchor: LadderSong;
   tiles: LadderSong[];
@@ -607,25 +829,35 @@ function pickTileKeyRespectingCaps(
   });
   let tileKey: LadderTileKey;
   if (withinCap.length > 0) {
-    tileKey = pickRandom(rng, withinCap);
+    tileKey = weightedPick(rng, withinCap);
   } else {
     const minCount = Math.min(...available.map((key) => usageCounts.get(key) ?? 0));
     const leastUsed = available.filter((key) => (usageCounts.get(key) ?? 0) === minCount);
-    tileKey = pickRandom(rng, leastUsed);
+    tileKey = weightedPick(rng, leastUsed);
   }
   usageCounts.set(tileKey, (usageCounts.get(tileKey) ?? 0) + 1);
   return tileKey;
 }
 
-function buildLadderRoute(
+/**
+ * Builds a route, reporting the fame floor it actually managed it at.
+ *
+ * A thin pool may only produce a chain once the floor is relaxed, and
+ * callers must know that: decoys have to be drawn from the same band as the
+ * answers. Picking decoys at the *requested* floor while the route fell back
+ * to a lower one leaves the two sides visibly different in
+ * recognisability, which is precisely the giveaway the fame work exists to
+ * prevent.
+ */
+export function buildLadderRoute(
   dataset: LadderDataset,
   categoryId: LadderCategoryId,
   rng: () => number,
   minFame: number,
-): LadderRoute {
+): { route: LadderRoute; minFameUsed: number } {
   for (const floor of fameFallbacks(minFame)) {
     const route = tryBuildLadderRoute(dataset, categoryId, rng, floor);
-    if (route) return route;
+    if (route) return { route, minFameUsed: floor };
   }
   throw new Error(`Unable to prepare a five-song chain for category "${categoryId}".`);
 }
@@ -664,29 +896,50 @@ function tryBuildLadderRoute(
       usableTileKeys(category).map((key) => [key, rollUsageCap(rng)]),
     );
     const usageCounts = new Map<LadderTileKey, number>();
+    const performerCounts = new Map<string, number>([[starter.performer, 1]]);
+    const blockedPerformers = new Set<string>();
+    const notePerformer = (song: LadderSong) => {
+      const count = (performerCounts.get(song.performer) ?? 0) + 1;
+      performerCounts.set(song.performer, count);
+      if (count >= MAX_SONGS_PER_PERFORMER) blockedPerformers.add(song.performer);
+    };
     let current = starter;
     let failed = false;
 
+    const withinYearCap = (keys: LadderTileKey[]) =>
+      (usageCounts.get("same_year") ?? 0) >= MAX_SAME_YEAR_LINKS
+        ? keys.filter((key) => key !== "same_year")
+        : keys;
+
     for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
-      const available = availableTileKeys(current.id, dataset, index, category, usedIds, minFame);
+      const available = withinYearCap(
+        availableTileKeys(current.id, dataset, index, category, usedIds, minFame, blockedPerformers),
+      );
       if (available.length === 0) {
         failed = true;
         break;
       }
       const tileKey = pickTileKeyRespectingCaps(available, rng, usageCaps, usageCounts);
-      const neighborIds = eligibleNeighborIds(current.id, tileKey, dataset, index, category, usedIds, minFame);
+      const neighborIds = eligibleNeighborIds(
+        current.id, tileKey, dataset, index, category, usedIds, minFame, blockedPerformers,
+      );
       const next = dataset.songs[pickRandom(rng, neighborIds)];
       tiles.push(next);
       reasons.push(tileKey);
       usedIds.add(next.id);
+      notePerformer(next);
       current = next;
     }
     if (failed) continue;
 
-    const anchorAvailable = availableTileKeys(current.id, dataset, index, category, usedIds, minFame);
+    const anchorAvailable = withinYearCap(
+      availableTileKeys(current.id, dataset, index, category, usedIds, minFame, blockedPerformers),
+    );
     if (anchorAvailable.length === 0) continue;
     const anchorTileKey = pickTileKeyRespectingCaps(anchorAvailable, rng, usageCaps, usageCounts);
-    const anchorNeighbors = eligibleNeighborIds(current.id, anchorTileKey, dataset, index, category, usedIds, minFame);
+    const anchorNeighbors = eligibleNeighborIds(
+      current.id, anchorTileKey, dataset, index, category, usedIds, minFame, blockedPerformers,
+    );
     const anchor = dataset.songs[pickRandom(rng, anchorNeighbors)];
 
     const route: LadderRoute = { starter, anchor, tiles, reasons, anchorReason: anchorTileKey };
@@ -700,7 +953,7 @@ function tryBuildLadderRoute(
   return bestRoute;
 }
 
-function toTile(song: LadderSong): LadderSongTile {
+export function toTile(song: LadderSong): LadderSongTile {
   return {
     kind: "LADDER_SONG",
     id: String(song.id),
@@ -708,6 +961,7 @@ function toTile(song: LadderSong): LadderSongTile {
     performer: song.performer,
     peakPos: song.peakPos,
     maxWksOnChart: song.maxWksOnChart,
+    debutYear: song.debutYear,
   };
 }
 
@@ -744,17 +998,7 @@ function pickConnectionChoices(
 ): LadderTileKey[] {
   const category = categoryById(categoryId);
   const pool = usableTileKeys(category).filter((key) => key !== correct);
-  // Drop the far side of any tier pair the players' songs already share -
-  // see TIER_COMPLEMENTS for why a free-to-eliminate decoy is worse than a
-  // smaller pool.
-  const trivial = new Set<LadderTileKey>();
-  for (const [a, b] of TIER_COMPLEMENTS) {
-    const aHolds = correct === a || alsoTrue.includes(a);
-    const bHolds = correct === b || alsoTrue.includes(b);
-    if (aHolds) trivial.add(b);
-    if (bHolds) trivial.add(a);
-  }
-  const falseKeys = pool.filter((key) => !alsoTrue.includes(key) && !trivial.has(key));
+  const falseKeys = pool.filter((key) => !alsoTrue.includes(key));
   const decoys = shuffled(rng, falseKeys).slice(0, 2);
   if (decoys.length < 2) {
     for (const key of shuffled(rng, pool.filter((k) => !decoys.includes(k)))) {
@@ -835,6 +1079,8 @@ export class GuidedGameEngine {
   private pendingBasePoints = 0;
   private currentTilePlaced = false;
   private minFame: number;
+  /** The floor the current route was actually built at - see buildLadderRoute. */
+  private effectiveMinFame: number = DEFAULT_MIN_FAME;
   /**
    * Every connection that genuinely holds for the current step's pair, any
    * of which is scored as correct. Populated in chooseTile(); the route's
@@ -858,7 +1104,9 @@ export class GuidedGameEngine {
       this.misses = progress.misses;
       this.roundsCompleted = progress.roundsCompleted;
     }
-    this.route = buildLadderRoute(dataset, categoryId, this.rng, minFame);
+    const built = buildLadderRoute(dataset, categoryId, this.rng, minFame);
+    this.route = built.route;
+    this.effectiveMinFame = built.minFameUsed;
     this.board = createEmptyBoard();
     this.placeStarterAndAnchor();
     this.prepareChoices();
@@ -894,7 +1142,7 @@ export class GuidedGameEngine {
     // Relax the floor only if the banded pool genuinely can't supply two
     // decoys (very narrow category at a very high floor); a step with one
     // choice would be worse than a slightly obscure decoy.
-    for (const floor of fameFallbacks(this.minFame)) {
+    for (const floor of fameFallbacks(this.effectiveMinFame)) {
       const decoys: LadderSong[] = [];
       for (let attempts = 0; attempts < 5000 && decoys.length < 2; attempts++) {
         const candidate = pickRandom(this.rng, this.dataset.songs);
@@ -1101,7 +1349,9 @@ export class GuidedGameEngine {
     if (this.status !== "path-complete") {
       throw new Error("A new round can only start after completing the current path.");
     }
-    this.route = buildLadderRoute(this.dataset, this.categoryId, this.rng, this.minFame);
+    const built = buildLadderRoute(this.dataset, this.categoryId, this.rng, this.minFame);
+    this.route = built.route;
+    this.effectiveMinFame = built.minFameUsed;
     this.board = createEmptyBoard();
     this.placeStarterAndAnchor();
     this.choices = [];

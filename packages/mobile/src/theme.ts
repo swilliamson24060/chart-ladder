@@ -28,18 +28,12 @@ export const colors = {
 
 import type { LadderTileKey } from "@chartcross/engine";
 
-// The two chart-tier pairs share a hue each (blue for peak, orange for run
-// length) so a player can see at a glance that BOTH TOP 40 / BOTH MISSED
-// TOP 40 are two sides of the same question.
 export const connectionColors: Record<LadderTileKey | "WILDCARD", string> = {
   same_artist: colors.artist,
   band_collab: colors.connectorArtist,
   same_genre: colors.decade,
   same_award: colors.wildcard,
-  top_40: colors.song,
-  outside_top_40: "#7fa8c9",
-  long_run: colors.chartBoost,
-  short_run: "#c9926b",
+  same_year: colors.song,
   WILDCARD: colors.wildcard,
 };
 
@@ -48,8 +42,5 @@ export const connectorDim: Record<LadderTileKey, string> = {
   band_collab: "#4a3016",
   same_genre: "#1e4230",
   same_award: colors.wildcardDim,
-  top_40: colors.songDim,
-  outside_top_40: "#2b3d4a",
-  long_run: "#4a2f16",
-  short_run: "#3d2c1e",
+  same_year: colors.songDim,
 };

@@ -57,11 +57,9 @@ export interface ConnectorTile {
 }
 
 /**
- * A song from the connections-based ladder dataset (data/connections.json) -
- * distinct from SongTile because that dataset has no chart-year data, only
- * title/performer/peak position/weeks-on-chart. Used exclusively by the
- * ladder game (see ladder.ts); the legacy SongTile/ArtistTile pair above
- * remains for the older free-play engine.
+ * A song from the connections-based ladder dataset (data/connections.json).
+ * Distinct from SongTile, which belongs to the older free-play engine and
+ * carries a separate peak/debut year pair.
  */
 export interface LadderSongTile {
   kind: "LADDER_SONG";
@@ -70,6 +68,8 @@ export interface LadderSongTile {
   performer: string;
   peakPos: number;
   maxWksOnChart: number;
+  /** Year of first Hot 100 entry, or 0 if unknown. */
+  debutYear: number;
 }
 
 export type Tile = SongTile | ArtistTile | WildcardTile | ConnectorTile | LadderSongTile;

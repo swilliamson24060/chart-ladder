@@ -27,10 +27,13 @@ import {
   ladderConnectionReason,
   ladderTileKeysForCategory,
   ladderTrueConnections,
-  LONG_RUN_CUTOFF_WEEKS,
-  TOP_40_CUTOFF,
+  LADDER_GENRES,
+  LADDER_BASE_CATEGORIES,
+  ladderCategoryId,
+  isCategoryPlayable,
+  categoryById,
+  DEFAULT_MIN_FAME,
   type LadderRawData,
-  type LadderTileKey,
 } from "../ladder";
 import {
   ArtistTile,
@@ -1187,36 +1190,59 @@ const topTier = LADDER_CATEGORIES.find((c) => c.id === "top-tier")!;
 }
 
 {
-  const engine = new GuidedGameEngine(ladderDataset, "one-hit-wonders", 20260725);
-  const oneHitWonders = LADDER_CATEGORIES.find((c) => c.id === "one-hit-wonders")!;
+  const engine = new GuidedGameEngine(ladderDataset, "up-to-three-hits", 20260725);
+  const oneHitWonders = LADDER_CATEGORIES.find((c) => c.id === "up-to-three-hits")!;
   const performerSongCounts = new Map<string, number>();
   for (const song of ladderDataset.songs) {
     performerSongCounts.set(song.performer, (performerSongCounts.get(song.performer) ?? 0) + 1);
   }
   let state = engine.getState();
   check(
-    "One Hit Wonders round only offers eligible starter/anchor songs",
+    "1 and a 2 and a 3 round only offers eligible starter/anchor songs",
     [state.board[GUIDED_PATH_POSITIONS[0].row][GUIDED_PATH_POSITIONS[0].col].tile, state.board[GUIDED_PATH_POSITIONS[6].row][GUIDED_PATH_POSITIONS[6].col].tile].every((tile) =>
       oneHitWonders.isEligible(ladderDataset.songs[Number((tile as LadderSongTile).id)], { performerSongCounts }),
     ),
   );
   check(
-    "One Hit Wonders choices are all eligible for the category",
+    "1 and a 2 and a 3 choices are all eligible for the category",
     state.choices.every((choice) => oneHitWonders.isEligible(ladderDataset.songs[Number(choice.id)], { performerSongCounts })),
   );
 }
 
+/**
+ * A representative slice of the 24 genre x rule combinations: every rule in
+ * its all-genres form, plus every genre paired with a different rule. Runs
+ * in a fraction of the time while still touching each rule and each genre.
+ */
+const SAMPLE_CATEGORIES = [
+  ...LADDER_BASE_CATEGORIES.map((base) => categoryById(ladderCategoryId(base.id))),
+  // Several genre/rule pairings genuinely can't build a chain (see
+  // isCategoryPlayable), so each genre contributes its first playable rule
+  // rather than a fixed one - otherwise the sample spends its time watching
+  // the route builder exhaust every retry on a dead combination.
+  ...LADDER_GENRES.map((genre) => {
+    const base = LADDER_BASE_CATEGORIES.find((b) =>
+      isCategoryPlayable(ladderDataset, ladderCategoryId(b.id, genre.id)),
+    )!;
+    return categoryById(ladderCategoryId(base.id, genre.id));
+  }),
+];
+
 console.log("\nCategory-aware connection reporting (the tutorial's correct-tile lookup):");
 {
   check(
-    "ladderTileKeysForCategory drops Same Artist for One Hit Wonders",
-    !ladderTileKeysForCategory("one-hit-wonders").includes("same_artist") &&
-      ladderTileKeysForCategory("one-hit-wonders").length === LADDER_TILE_KEYS.length - 1,
+    "ladderTileKeysForCategory keeps every key for 1 and a 2 and a 3",
+    ladderTileKeysForCategory("up-to-three-hits").length === LADDER_TILE_KEYS.length,
   );
   check(
-    "ladderTileKeysForCategory drops both chart-tier keys for We're Number 1!",
-    !ladderTileKeysForCategory("number-one-hits").includes("top_40") &&
-      !ladderTileKeysForCategory("number-one-hits").includes("outside_top_40"),
+    "ladderTileKeysForCategory drops Same Genre for every genre-filtered category",
+    LADDER_CATEGORIES.filter((c) => c.genreId).every(
+      (c) => !ladderTileKeysForCategory(c.id).includes("same_genre"),
+    ),
+  );
+  check(
+    "Categories are the genre x rule cross-product plus the all-genre versions",
+    LADDER_CATEGORIES.length === LADDER_BASE_CATEGORIES.length * (LADDER_GENRES.length + 1),
   );
   check(
     "ladderTileKeysForCategory keeps every key for an unrestricted category",
@@ -1231,7 +1257,7 @@ console.log("\nCategory-aware connection reporting (the tutorial's correct-tile 
   let spuriousWithoutCategory = 0;
   let stepsChecked = 0;
 
-  for (const category of LADDER_CATEGORIES) {
+  for (const category of SAMPLE_CATEGORIES) {
     for (let seed = 0; seed < 20; seed++) {
       const engine = new GuidedGameEngine(ladderDataset, category.id, 4000 + seed);
       for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
@@ -1273,48 +1299,48 @@ console.log("\nCategory-aware connection reporting (the tutorial's correct-tile 
   );
 }
 
-console.log("\nChart-tier connections and accept-any-true scoring:");
+console.log("\nGenre categories:");
 {
-  // The tier keys are exact properties of the pair, so they must hold
-  // regardless of whether the generator sampled that pair into a group.
-  const tierChecks: Array<[LadderTileKey, number, number, number, number, boolean]> = [
-    // key, peakA, wksA, peakB, wksB, expected
-    ["top_40", 1, 20, TOP_40_CUTOFF, 5, true],
-    ["top_40", 1, 20, TOP_40_CUTOFF + 1, 5, false],
-    ["outside_top_40", TOP_40_CUTOFF + 1, 4, 99, 2, true],
-    ["outside_top_40", TOP_40_CUTOFF, 4, 99, 2, false],
-    ["long_run", 50, LONG_RUN_CUTOFF_WEEKS, 60, 40, true],
-    ["long_run", 50, LONG_RUN_CUTOFF_WEEKS - 1, 60, 40, false],
-    ["short_run", 50, LONG_RUN_CUTOFF_WEEKS - 1, 60, 1, true],
-    ["short_run", 50, LONG_RUN_CUTOFF_WEEKS, 60, 1, false],
-  ];
-  const asTile = (id: string, peakPos: number, maxWksOnChart: number): LadderSongTile => ({
-    kind: "LADDER_SONG", id, title: id, performer: id, peakPos, maxWksOnChart,
-  });
-  let tierFailures = 0;
-  for (const [key, peakA, wksA, peakB, wksB, expected] of tierChecks) {
-    // Ids far outside the dataset so no real group membership can interfere.
-    const a = asTile("999901", peakA, wksA);
-    const b = asTile("999902", peakB, wksB);
-    if (ladderTrueConnections(a, b, ladderDataset, "top-tier").includes(key) !== expected) tierFailures++;
+  const bySong = new Map(ladderDataset.songs.map((s) => [s.id, s]));
+  for (const genre of LADDER_GENRES) {
+    const categoryId = ladderCategoryId("top-tier", genre.id);
+    const category = LADDER_CATEGORIES.find((c) => c.id === categoryId)!;
+    const buckets = genre.buckets as readonly string[];
+    const pool = ladderDataset.songs.filter((s) => buckets.includes(s.genre) && s.fame >= DEFAULT_MIN_FAME);
+    let offPool = 0;
+    for (let seed = 0; seed < 10; seed++) {
+      const engine = new GuidedGameEngine(ladderDataset, categoryId, 9000 + seed);
+      for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
+        const state = engine.getState();
+        for (const choice of state.choices as LadderSongTile[]) {
+          const g = bySong.get(Number(choice.id))?.genre ?? "";
+          if (!buckets.includes(g)) offPool++;
+        }
+        engine.chooseTile(engine.peekCorrectChoiceIndex());
+        engine.guessConnection(engine.peekCurrentReason()!);
+      }
+      if (engine.getState().status !== "path-complete") offPool++;
+    }
+    check(`${genre.name}: 10 rounds build and every tile is in-genre (pool ${pool.length})`, offPool === 0);
+    check(`${genre.name}: Same Genre is not offered as a connection`, !!category.excludedTileKeys?.includes("same_genre"));
   }
-  check("Chart-tier connections evaluate exactly from peak position and weeks", tierFailures === 0);
-  check(
-    "Top 40 and Outside Top 40 are mutually exclusive",
-    !ladderTrueConnections(asTile("999901", 5, 30), asTile("999902", 80, 30), ladderDataset, "top-tier")
-      .some((k) => k === "top_40" || k === "outside_top_40"),
-  );
+}
 
+console.log("\nAccept-any-true scoring:");
+{
   // Every offered choice that genuinely holds must score; every one that
   // doesn't must not. This is the fairness property the change exists for.
   let acceptedWrongly = 0;
   let rejectedWrongly = 0;
   let stepsWithMultipleTruths = 0;
   let stepsWithMultipleOffered = 0;
+  let avoidableMultiOffers = 0;
   let steps = 0;
 
-  for (const category of LADDER_CATEGORIES) {
-    for (let seed = 0; seed < 15; seed++) {
+  // 8 seeds rather than 15: each step is replayed once per offered option
+  // to see how it scores, so this block costs ~3 engine builds per step.
+  for (const category of SAMPLE_CATEGORIES) {
+    for (let seed = 0; seed < 8; seed++) {
       const engine = new GuidedGameEngine(ladderDataset, category.id, 8000 + seed);
       for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
         const before = engine.getState();
@@ -1325,9 +1351,20 @@ console.log("\nChart-tier connections and accept-any-true scoring:");
         const truths = ladderTrueConnections(previous, chosen, ladderDataset, category.id);
         if (truths.length > 1) stepsWithMultipleTruths++;
 
+        const routeReason = engine.peekCurrentReason()!;
         engine.chooseTile(correctIndex);
         const offered = engine.getState().connectionChoices;
-        if (offered.filter((k) => truths.includes(k)).length > 1) stepsWithMultipleOffered++;
+        if (offered.filter((k) => truths.includes(k)).length > 1) {
+          stepsWithMultipleOffered++;
+          // With only four connection types, a pair that satisfies three of
+          // them leaves fewer than two false keys to fill the decoy slots.
+          // Offering a second correct answer is the deliberate fallback -
+          // but it must only happen when there was genuinely no alternative.
+          const falseAvailable = ladderTileKeysForCategory(category.id).filter(
+            (k) => k !== routeReason && !truths.includes(k),
+          ).length;
+          if (falseAvailable >= 2) avoidableMultiOffers++;
+        }
 
         // Replay the same step for each offered option to see how it scores.
         for (const option of offered) {
@@ -1356,8 +1393,8 @@ console.log("\nChart-tier connections and accept-any-true scoring:");
   check("No genuinely false connection is scored as correct", acceptedWrongly === 0);
   check("Multi-truth pairs do occur, so the rule is actually exercised", stepsWithMultipleTruths > 0);
   check(
-    "Decoy filtering keeps a single correct option in nearly every step",
-    stepsWithMultipleOffered / Math.max(1, steps) < 0.05,
+    "A second correct option is only ever offered when the false pool was exhausted",
+    avoidableMultiOffers === 0,
   );
 }
 
