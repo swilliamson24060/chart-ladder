@@ -83,6 +83,10 @@ export function HowToPlayModal({ visible, onClose, onWatchTutorial }: Props) {
                   rungs, and below them a bank of {PUZZLE_BANK_SIZE} songs - the {GUIDED_PATH_LENGTH} that
                   belong, plus {PUZZLE_BANK_SIZE - GUIDED_PATH_LENGTH} that connect to nothing at all.
                 </Text>
+                <Text style={styles.body}>
+                  Tap START, ANCHOR, or any song you've already placed on the ladder to see its full
+                  details - artist, peak position, genre, and more.
+                </Text>
               </Section>
 
               <Section title="WORK IN FROM BOTH ENDS">
@@ -112,8 +116,12 @@ export function HowToPlayModal({ visible, onClose, onWatchTutorial }: Props) {
                   song in the bank. They're shared across the whole ladder, so spend them where you like.
                   Run out and the ladder ends.
                 </Text>
+              </Section>
+
+              <Section title="DON'T RECOGNIZE ANYTHING?">
                 <Text style={styles.body}>
-                  Tap any song already on the board to see its full details.
+                  If none of the starting songs ring a bell, shuffle for a new ladder - it's free any time
+                  before you've placed a tile.
                 </Text>
               </Section>
 

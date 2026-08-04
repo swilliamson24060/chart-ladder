@@ -237,6 +237,21 @@ export default function App() {
     refresh();
   }
 
+  /**
+   * Deals a fresh ladder in the same category, keeping session score and
+   * rounds-completed intact. Only offered before any tile is placed - once
+   * a rung is locked in, shuffling would throw away a correct guess rather
+   * than just admitting the starting bank was a dead end.
+   */
+  function handleShuffle() {
+    const next = levelNumber + 1;
+    setLevelNumber(next);
+    engineRef.current = newEngine(activeCategory, next, engineRef.current.getProgress());
+    resetViewState();
+    refresh();
+    showToast("New ladder dealt.");
+  }
+
   async function handleSaveAndExit() {
     const saved: SavedGuidedGame = {
       version: 3,
@@ -382,13 +397,20 @@ export default function App() {
         )}
 
         {gameState.status === "playing" && !gameState.awaitingConnectionGuess && (
-          <PuzzleBank
-            bank={gameState.bank}
-            selectedIndex={selectedTile}
-            disabled={false}
-            tileSize={Math.min(120, (Math.min(width, MAX_BOARD_WIDTH) - 60) / 3)}
-            onSelect={handleSelectTile}
-          />
+          <>
+            {placedCount === 0 && (
+              <Pressable style={styles.shuffleButton} onPress={handleShuffle} hitSlop={6}>
+                <Text style={styles.shuffleText}>🔀 Don't know any of these? Shuffle for a new ladder</Text>
+              </Pressable>
+            )}
+            <PuzzleBank
+              bank={gameState.bank}
+              selectedIndex={selectedTile}
+              disabled={false}
+              tileSize={Math.min(120, (Math.min(width, MAX_BOARD_WIDTH) - 60) / 3)}
+              onSelect={handleSelectTile}
+            />
+          </>
         )}
       </View>
 
@@ -580,6 +602,18 @@ const styles = StyleSheet.create({
     maxWidth: 480,
     alignItems: "center",
     paddingHorizontal: 12,
+  },
+  shuffleButton: {
+    alignSelf: "center",
+    marginBottom: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  shuffleText: {
+    color: colors.song,
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
   },
   connectionHeading: {
     color: colors.textPrimary,
