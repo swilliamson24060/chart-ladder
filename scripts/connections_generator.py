@@ -358,9 +358,15 @@ def main():
                 for member in (row.get("wd_band_members") or "").split("|"):
                     if member:
                         add(groups, "band_membership", member, song_id)
-                for group_name in (row.get("wd_member_of") or "").split("|"):
-                    if group_name:
-                        add(groups, "band_membership", group_name, song_id)
+                # A band's own songs get filed under a group per *member name*
+                # (above), so a member's solo songs must land in that same
+                # group -- keyed by the member's own performer credit, not by
+                # the band's name -- or the two sides never merge into one
+                # group. wd_member_of only tells us the performer belongs to
+                # *some* band; membership in a specific title isn't needed
+                # here, just that this performer credit gets a shared home.
+                if (row.get("wd_member_of") or "").strip():
+                    add(groups, "band_membership", performer, song_id)
                 mbid = row.get("wd_performer_mbid")
                 if mbid:
                     add(groups, "same_artist_identity", mbid, song_id)  # catches name variants of the same act

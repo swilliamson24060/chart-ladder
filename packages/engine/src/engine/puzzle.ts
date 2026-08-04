@@ -29,6 +29,7 @@ import {
   meetsFame,
   categoryPoolSize,
   MIN_CATEGORY_POOL,
+  normalizedTitle,
   type LadderCategoryId,
   type LadderDataset,
   type LadderRoute,
@@ -280,6 +281,13 @@ export class PuzzleGameEngine {
     const chain = [this.route.starter, ...this.route.tiles, this.route.anchor];
     const chainTiles = chain.map(toTile);
     const usedIds = new Set(chain.map((s) => s.id));
+    // The bank shows only the title until a tile is placed, so a decoy that
+    // happens to share an exact title with a chain song (two unrelated songs
+    // both called "Roundabout") would be indistinguishable from the real
+    // answer even though the two songs are unrelated underneath. Excluded
+    // the same way an already-used id is; also grown as decoys are accepted
+    // so two decoys can't collide with each other either.
+    const usedTitles = new Set(chain.map(normalizedTitle));
 
     const decoys: LadderSong[] = [];
     for (const floor of [this.effectiveMinFame, Math.floor(this.effectiveMinFame / 2), 0]) {
@@ -289,6 +297,7 @@ export class PuzzleGameEngine {
         if (!meetsFame(this.dataset, candidate, floor)) continue;
         if (!category.isEligible(candidate, index.categoryContext)) continue;
         if (decoys.some((d) => d.id === candidate.id)) continue;
+        if (usedTitles.has(normalizedTitle(candidate))) continue;
         const candidateTile = toTile(candidate);
         const connectsToChain = chainTiles.some(
           (member) => ladderTrueConnections(member, candidateTile, this.dataset, this.categoryId).length > 0,
@@ -296,6 +305,7 @@ export class PuzzleGameEngine {
         if (connectsToChain) continue;
         decoys.push(candidate);
         usedIds.add(candidate.id);
+        usedTitles.add(normalizedTitle(candidate));
       }
       if (decoys.length === PUZZLE_DECOY_COUNT) return decoys;
     }

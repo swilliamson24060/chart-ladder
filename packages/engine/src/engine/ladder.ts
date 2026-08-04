@@ -640,6 +640,18 @@ export function meetsFame(dataset: LadderDataset, song: LadderSong, minFame: num
   return song.fame >= minFame;
 }
 
+/**
+ * A song's title, normalized for collision checks. The dataset has real,
+ * unrelated songs sharing an exact title (e.g. Connie Francis's and Yes's
+ * both being called "Roundabout") - about 1 in 10 titles in the dataset
+ * belongs to more than one song. The puzzle bank shows only the title until
+ * a tile is placed, so two same-titled-but-different songs in one puzzle are
+ * indistinguishable to the player even though they're unrelated underneath.
+ */
+export function normalizedTitle(song: LadderSong): string {
+  return song.title.trim().toLowerCase();
+}
+
 function eligibleNeighborIds(
   songId: number,
   tileKey: LadderTileKey,
@@ -649,6 +661,7 @@ function eligibleNeighborIds(
   usedIds: Set<number>,
   minFame: number,
   blockedPerformers?: Set<string>,
+  usedTitles?: Set<string>,
 ): number[] {
   const groups = index.memberships.get(songId)?.get(tileKey);
   if (!groups) return [];
@@ -660,6 +673,7 @@ function eligibleNeighborIds(
       const song = dataset.songs[id];
       if (!meetsFame(dataset, song, minFame)) continue;
       if (blockedPerformers?.has(song.performer)) continue;
+      if (usedTitles?.has(normalizedTitle(song))) continue;
       if (category.isEligible(song, index.categoryContext)) candidates.add(id);
     }
   }
@@ -804,10 +818,12 @@ function availableTileKeys(
   usedIds: Set<number>,
   minFame: number,
   blockedPerformers?: Set<string>,
+  usedTitles?: Set<string>,
 ): LadderTileKey[] {
   return usableTileKeys(category).filter(
     (tileKey) =>
-      eligibleNeighborIds(songId, tileKey, dataset, index, category, usedIds, minFame, blockedPerformers).length > 0,
+      eligibleNeighborIds(songId, tileKey, dataset, index, category, usedIds, minFame, blockedPerformers, usedTitles)
+        .length > 0,
   );
 }
 
@@ -914,6 +930,12 @@ function tryBuildLadderRoute(
       performerCounts.set(song.performer, count);
       if (count >= MAX_SONGS_PER_PERFORMER) blockedPerformers.add(song.performer);
     };
+    // Two unrelated songs can share an exact title (e.g. Connie Francis's and
+    // Yes's "Roundabout"). The bank shows only the title until a tile is
+    // placed, so two chain members with the same title would be
+    // indistinguishable to the player - excluded here the same way a
+    // reused song id already is.
+    const usedTitles = new Set<string>([normalizedTitle(starter)]);
     let current = starter;
     let failed = false;
 
@@ -924,7 +946,7 @@ function tryBuildLadderRoute(
 
     for (let step = 0; step < GUIDED_PATH_LENGTH; step++) {
       const available = withinYearCap(
-        availableTileKeys(current.id, dataset, index, category, usedIds, minFame, blockedPerformers),
+        availableTileKeys(current.id, dataset, index, category, usedIds, minFame, blockedPerformers, usedTitles),
       );
       if (available.length === 0) {
         failed = true;
@@ -932,24 +954,25 @@ function tryBuildLadderRoute(
       }
       const tileKey = pickTileKeyRespectingCaps(available, rng, usageCaps, usageCounts);
       const neighborIds = eligibleNeighborIds(
-        current.id, tileKey, dataset, index, category, usedIds, minFame, blockedPerformers,
+        current.id, tileKey, dataset, index, category, usedIds, minFame, blockedPerformers, usedTitles,
       );
       const next = dataset.songs[pickRandom(rng, neighborIds)];
       tiles.push(next);
       reasons.push(tileKey);
       usedIds.add(next.id);
       notePerformer(next);
+      usedTitles.add(normalizedTitle(next));
       current = next;
     }
     if (failed) continue;
 
     const anchorAvailable = withinYearCap(
-      availableTileKeys(current.id, dataset, index, category, usedIds, minFame, blockedPerformers),
+      availableTileKeys(current.id, dataset, index, category, usedIds, minFame, blockedPerformers, usedTitles),
     );
     if (anchorAvailable.length === 0) continue;
     const anchorTileKey = pickTileKeyRespectingCaps(anchorAvailable, rng, usageCaps, usageCounts);
     const anchorNeighbors = eligibleNeighborIds(
-      current.id, anchorTileKey, dataset, index, category, usedIds, minFame, blockedPerformers,
+      current.id, anchorTileKey, dataset, index, category, usedIds, minFame, blockedPerformers, usedTitles,
     );
     const anchor = dataset.songs[pickRandom(rng, anchorNeighbors)];
 
