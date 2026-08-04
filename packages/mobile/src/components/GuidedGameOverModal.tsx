@@ -14,6 +14,8 @@ interface Props {
   correctTile: LadderSongTile | null;
   onRestart: () => void;
   onScoreSubmitted: () => void;
+  /** Reveals the full solution, including the rungs that were never placed. */
+  onViewChain: () => void;
 }
 
 type SubmitState = "idle" | "submitting" | "done" | "error";
@@ -27,6 +29,7 @@ export function GuidedGameOverModal({
   correctTile,
   onRestart,
   onScoreSubmitted,
+  onViewChain,
 }: Props) {
   const [name, setName] = useState("");
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
@@ -98,6 +101,9 @@ export function GuidedGameOverModal({
             </View>
           )}
           {submitState === "error" && <Text style={styles.error}>Could not submit. Try again.</Text>}
+          <Pressable style={styles.chainButton} onPress={onViewChain}>
+            <Text style={styles.chainButtonText}>🔗 SEE THE CORRECT CHAIN</Text>
+          </Pressable>
           <Pressable style={styles.restartButton} onPress={onRestart}>
             <Text style={styles.buttonText}>PLAY AGAIN</Text>
           </Pressable>
@@ -171,6 +177,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.artist,
     alignItems: "center",
     justifyContent: "center",
+  },
+  chainButton: {
+    width: "100%",
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: colors.textSecondary,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  chainButtonText: {
+    color: colors.textSecondary,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    fontSize: 12,
   },
   restartButton: {
     width: "100%",

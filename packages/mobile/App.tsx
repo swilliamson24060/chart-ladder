@@ -19,6 +19,7 @@ import {
   createPuzzleWithRetry,
   ladderLeaderboardKey,
   type LadderTileKey,
+  type PuzzleGameEngine,
   type PuzzleSessionProgress,
 } from "@chartcross/engine";
 import { BOARD_RENDER_COLS } from "./src/boardLayout";
@@ -54,6 +55,9 @@ import {
 function newEngine(category: GameCategory, levelNumber: number, progress?: PuzzleSessionProgress) {
   return createPuzzleWithRetry(ladderDataset, category.id, Date.now() + levelNumber, undefined, progress);
 }
+
+/** Stable empty value so a closed chain modal doesn't allocate each render. */
+const EMPTY_SOLUTION: ReturnType<PuzzleGameEngine["revealSolution"]> = { tiles: [], reasons: [] };
 
 const HEADER_HEIGHT = 52;
 const SUBHEADER_HEIGHT = 44;
@@ -274,6 +278,11 @@ export default function App() {
   // tapped on the genre screen.
   const activeGenreName = activeCategory.genreLabel ?? "All genres";
   const activeBoard = ladderLeaderboardKey(activeCategory);
+  // Read from the route rather than the board so a lost ladder can still
+  // show the rungs the player never placed. Only computed while the chain
+  // modal is open - it's the answer key, and there's no reason to build it
+  // on every render of a live puzzle.
+  const solution = showChainModal ? engineRef.current.revealSolution() : EMPTY_SOLUTION;
   const placedCount = gameState.bank.filter((entry) => entry.placedAt !== null).length;
   const openRungCells = new Set(
     gameState.openRungs.map((rung) => {
@@ -393,6 +402,7 @@ export default function App() {
         correctTile={null}
         onRestart={handleRestart}
         onScoreSubmitted={() => setLeaderboardRefreshKey((key) => key + 1)}
+        onViewChain={() => setShowChainModal(true)}
       />
       <RoundCompleteModal
         visible={gameState.status === "solved" && !showCategorySelect && !showChainModal}
@@ -406,8 +416,9 @@ export default function App() {
       />
       <ConnectionChainModal
         visible={showChainModal}
-        board={gameState.board}
-        connections={gameState.completedConnections}
+        tiles={solution.tiles}
+        reasons={solution.reasons}
+        lost={isOver}
         onClose={() => setShowChainModal(false)}
       />
       <HowToPlayModal visible={showHowToPlay} onClose={handleCloseHowToPlay} onWatchTutorial={handleWatchTutorial} />

@@ -473,6 +473,20 @@ export class PuzzleGameEngine {
     };
   }
 
+  /**
+   * The full solution: all seven songs from START to ANCHOR plus the six
+   * links between them.
+   *
+   * Needed because a lost ladder is an incomplete one - completedConnections
+   * only holds the rungs the player actually solved, so it can't show them
+   * what they missed. Reads the route directly instead.
+   */
+  revealSolution(): { tiles: LadderSongTile[]; reasons: LadderTileKey[] } {
+    const tiles = [this.route.starter, ...this.route.tiles, this.route.anchor].map(toTile);
+    const reasons = [...this.route.reasons, this.route.anchorReason];
+    return { tiles, reasons };
+  }
+
   peekPendingReason(): LadderTileKey | null {
     return this.pendingReason;
   }
