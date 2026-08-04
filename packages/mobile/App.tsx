@@ -171,6 +171,15 @@ export default function App() {
     setShowChainModal(false);
   }
 
+  /**
+   * After a loss, "Play again" returns to the picker rather than dealing
+   * another ladder in the same category - a category that just beat you is
+   * rarely the one you want to be dropped straight back into.
+   *
+   * A fresh engine is built first so the game-over modal has something live
+   * behind it and closes; if the player dismisses the picker instead of
+   * choosing, they land on a new round of the category they were in.
+   */
   function handleRestart() {
     const next = levelNumber + 1;
     setLevelNumber(next);
@@ -179,6 +188,7 @@ export default function App() {
     setSavedGame(null);
     resetViewState();
     refresh();
+    setShowCategorySelect(true);
   }
 
   /**

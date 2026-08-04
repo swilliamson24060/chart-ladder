@@ -240,7 +240,7 @@ export class PuzzleGameEngine {
       this.score = progress.score;
       this.roundsCompleted = progress.roundsCompleted;
     }
-    const built = buildLadderRoute(dataset, categoryId, this.rng, minFame);
+    const built = buildLadderRoute(dataset, categoryId, this.rng, this.minFame);
     this.route = built.route;
     this.effectiveMinFame = built.minFameUsed;
     this.board = createEmptyBoard();

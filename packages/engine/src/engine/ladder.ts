@@ -285,7 +285,7 @@ export const LADDER_GENRES = [
 export type LadderGenreId = (typeof LADDER_GENRES)[number]["id"];
 
 /** The rule half of a category, before any genre filter is applied. */
-export type LadderBaseCategoryId = "up-to-three-hits" | "number-one-hits" | "top-tier";
+export type LadderBaseCategoryId = "up-to-three-hits" | "number-one-hits" | "top-40" | "top-tier";
 
 /**
  * Composite id, `"<genre>/<base>"` for a genre-filtered category and just
@@ -366,9 +366,17 @@ export const LADDER_BASE_CATEGORIES: BaseCategory[] = [
     genreMerges: [["pop", "country"]],
   },
   {
+    // Sits between We're Number 1! and The Top Tier: chart-toppers only,
+    // then anything that cracked the Top 40, then the whole Hot 100.
+    id: "top-40",
+    name: "Top 40",
+    description: "Songs that reached the Top 40 at least once.",
+    isEligible: (song) => song.peakPos <= TOP_40_PEAK,
+  },
+  {
     id: "top-tier",
     name: "The Top Tier",
-    description: "Every song in the chart history.",
+    description: "Notable songs from across the Top 100.",
     isEligible: () => true,
   },
 ];
@@ -431,6 +439,9 @@ export const LADDER_CATEGORIES: LadderCategoryDef[] = [
  * Country / One Hit Wonders sat right on that line at 55 songs.
  */
 export const MIN_CATEGORY_POOL = 100;
+
+/** Highest chart position still counted as a Top 40 hit. */
+export const TOP_40_PEAK = 40;
 
 /** Songs a category can actually draw on at a given fame floor. */
 export function categoryPoolSize(
@@ -1104,7 +1115,7 @@ export class GuidedGameEngine {
       this.misses = progress.misses;
       this.roundsCompleted = progress.roundsCompleted;
     }
-    const built = buildLadderRoute(dataset, categoryId, this.rng, minFame);
+    const built = buildLadderRoute(dataset, categoryId, this.rng, this.minFame);
     this.route = built.route;
     this.effectiveMinFame = built.minFameUsed;
     this.board = createEmptyBoard();
