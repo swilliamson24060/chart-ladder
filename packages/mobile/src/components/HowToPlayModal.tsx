@@ -127,7 +127,7 @@ export function HowToPlayModal({ visible, onClose, onWatchTutorial }: Props) {
 
             </ScrollView>
             {canScrollMore && (
-              <View style={styles.scrollHint} pointerEvents="none">
+              <View style={styles.scrollHint}>
                 <Text style={styles.scrollHintText}>▼ SCROLL FOR MORE</Text>
               </View>
             )}
@@ -197,6 +197,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingTop: 18,
     backgroundColor: "rgba(22, 33, 63, 0.95)",
+    pointerEvents: "none",
   },
   scrollHintText: {
     color: colors.textSecondary,

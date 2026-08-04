@@ -76,7 +76,7 @@ export function BoardGrid({
           their origin cell, so they can visually overflow into the next
           cell (one square over) without disturbing the grid squares below
           or the empty-cell layout above. */}
-      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+      <View style={[StyleSheet.absoluteFill, { pointerEvents: "box-none" }]}>
         {board.flatMap((row) => row).map((cell) => {
           if (!cell.tile) return null;
           return (
