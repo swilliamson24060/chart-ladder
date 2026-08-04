@@ -149,11 +149,25 @@ console.log("\nMistakes:");
   check("A wrong placement spends one mistake", engine.getState().mistakesRemaining === before - 1);
   check("A wrong placement leaves the tile in the bank", engine.getState().bank[wrongIndex].placedAt === null);
   check("A wrong placement doesn't lock the rung", !engine.getState().lockedRungs.includes(1));
+  check("A fresh wrong placement isn't flagged as already tried", !result.alreadyTried);
 
-  // Burn the rest of the allowance.
+  const repeat = engine.placeTile(wrongIndex, 1);
+  check("Retrying the same wrong tile on the same rung is flagged as already tried", repeat.alreadyTried === true);
+  check(
+    "Retrying the same wrong placement doesn't spend another mistake",
+    engine.getState().mistakesRemaining === before - 1,
+  );
+
+  // Burn the rest of the allowance - a different wrong tile each time, since
+  // retrying the one already tried above no longer spends a mistake.
   let guard = 0;
+  const tried = new Set<number>([wrongIndex]);
   while (engine.getState().status === "playing" && guard++ < 20) {
-    const idx = engine.getState().bank.findIndex((b, i) => b.placedAt === null && i !== engine.peekCorrectBankIndex(1));
+    const idx = engine
+      .getState()
+      .bank.findIndex((b, i) => b.placedAt === null && i !== engine.peekCorrectBankIndex(1) && !tried.has(i));
+    if (idx === -1) break;
+    tried.add(idx);
     engine.placeTile(idx, 1);
   }
   check(`Running out of ${PUZZLE_MISTAKE_ALLOWANCE} mistakes fails the puzzle`, engine.getState().status === "failed");

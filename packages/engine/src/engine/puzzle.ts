@@ -77,6 +77,8 @@ export interface PuzzlePlacementResult {
   correct: boolean;
   /** The connection linking the newly locked rung to the neighbour it attached to. */
   linkedReason?: LadderTileKey;
+  /** True when this exact (tile, rung) pairing already failed once before - no mistake was spent this time. */
+  alreadyTried?: boolean;
   awaitingConnectionGuess: boolean;
   pointsAwarded: number;
   mistakesRemaining: number;
@@ -225,6 +227,8 @@ export class PuzzleGameEngine {
   private acceptedReasons = new Set<LadderTileKey>();
   private pendingReason: LadderTileKey | null = null;
   private completedConnections: GuidedPathConnection[] = [];
+  /** (bankIndex, rung) pairs that have already failed once - retrying one doesn't spend another mistake. */
+  private triedPlacements = new Set<string>();
 
   constructor(
     dataset: LadderDataset,
@@ -266,6 +270,7 @@ export class PuzzleGameEngine {
     this.connectionChoices = [];
     this.pendingReason = null;
     this.completedConnections = [];
+    this.triedPlacements = new Set();
   }
 
   /**
@@ -373,11 +378,17 @@ export class PuzzleGameEngine {
 
     const expected = this.route.tiles[rung - 1];
     if (Number(entry.tile.id) !== expected.id) {
-      this.mistakes++;
-      if (this.mistakes >= PUZZLE_MISTAKE_ALLOWANCE) this.status = "failed";
+      const placementKey = `${bankIndex}:${rung}`;
+      const alreadyTried = this.triedPlacements.has(placementKey);
+      if (!alreadyTried) {
+        this.triedPlacements.add(placementKey);
+        this.mistakes++;
+        if (this.mistakes >= PUZZLE_MISTAKE_ALLOWANCE) this.status = "failed";
+      }
       return {
         legal: true,
         correct: false,
+        alreadyTried,
         awaitingConnectionGuess: false,
         pointsAwarded: 0,
         mistakesRemaining: PUZZLE_MISTAKE_ALLOWANCE - this.mistakes,

@@ -141,6 +141,8 @@ export default function App() {
       }
       if (result.correct) {
         showToast(`Correct — +${result.pointsAwarded}. Now name the connection.`);
+      } else if (result.alreadyTried) {
+        showToast("You already tried that connection.", true);
       } else if (result.status === "failed") {
         clearSavedGame().catch(() => undefined);
         setSavedGame(null);
